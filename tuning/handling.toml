@@ -1,0 +1,31 @@
+# PicOS Rally — handling tuning. Reloaded from the filesystem at stage start:
+# a tuning change is a reload, not a rebuild. All SI units unless noted.
+
+# --- vehicle (§9 starting figures) ---
+mass = 1180.0
+wheelbase = 2.55
+cg_front = 0.52
+cg_height = 0.55
+iz = 1600.0
+max_speed = 42.0          # m/s (~151 km/h)
+engine_force = 6000.0     # N at standstill, linear taper to 0 at max_speed
+brake_force = 9000.0
+drag = 0.4257             # N·s²/m² (½ρCdA)
+rolling_res = 12.8        # N·s/m
+ca_front = 60000.0        # N/rad
+ca_rear = 65000.0         # stiffer rear = mild understeer (forgiving default)
+
+# --- digital input: these four ARE the handling on a keyboard ---
+steer.ramp_up_s = 0.180   # 0 → full lock
+steer.ramp_down_s = 0.110 # full → centre
+steer.max_low_deg = 35.0  # lock at standstill
+steer.max_high_deg = 12.0 # lock at max speed
+throttle.ramp_up_s = 0.090
+
+# --- surface (F5 cycles in the grey box) ---
+mu = 0.72                 # gravel
+
+# --- arcade/sim dial (0 = raw model, 1 = Sega Rally hook-up) ---
+assist = 0.60
+assist.slip = 0.22        # rear slip (rad) where yaw assist engages
+assist.rate = 3.0         # yaw blend rate when engaged

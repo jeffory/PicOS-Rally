@@ -1,0 +1,10 @@
+{
+    "id": "com.picos.rally",
+    "name": "PicOS Rally",
+    "description": "Top-down arcade-sim rally. One coastal Queensland gravel stage.",
+    "type": "native",
+    "version": "0.1.0",
+    "requirements": [],
+    "category": "games",
+    "min_firmware": "1.0.0"
+}
