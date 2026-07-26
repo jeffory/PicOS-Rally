@@ -220,18 +220,40 @@ unnecessary — the firmware's double buffer already provides render-vs-DMA over
 - Engine/surface synth plan: generate into the ring from the core1 callback
   (doom mixes SFX exactly this way via `setAudioCallback`).
 
-### 0.9 Hardware measurements (PENDING — device session)
+### 0.9 Hardware measurements (DONE 2026-07-26, hwbench probe, `probes/hwbench/`)
 
-| Measurement | Prediction from code | Measured | Verdict |
-|---|---|---|---|
-| Full-frame push 320×320 | 16.4 ms @100 MHz | | |
-| Viewport push 320×240 | 12.3 ms | | |
-| Same @300 MHz | 21.8 / 16.4 ms | | |
-| Key press→`getButtons` latency | ≤ ~60 ms | | |
-| 3-key rollover (up+left+space etc.) | protocol supports; scanner TBD | | |
-| Poll interval effective rate | 20 Hz | | |
-| `drawPlane` 240-line cost | ~5 ms class | (M1 spike) | |
-| Sim step (2× bicycle) | ≤2 ms budget | (M1) | |
+| Measurement | Prediction | Measured @200 MHz | Measured @300 MHz | Verdict |
+|---|---|---|---|---|
+| Full-frame push 320×320 | 16.4 ms | **17.420 ms** (57.4 fps cap) | **23.216 ms** (43.0 fps cap) | RGB565 2 B/px confirmed; ~6 % overhead over wire theory |
+| Viewport push 320×240 | 12.3 ms | **13.068 ms** (76.5 fps cap) | **17.414 ms** (57.4 fps cap) | viewport-only @300 ≈ full-frame @200 |
+| HUD strip push 320×80 | 4.1 ms | **4.517 ms** | **5.823 ms** | cheap when dirty-only |
+| App PSRAM budget | ~5–6 MB | **6 139 000 B free** at launch (launcher log) | same | 5.86 MB — design to it |
+| App stack | 16 KB SRAM pref | 64 KB PSRAM (SRAM heap didn't have 16 KB free) | same | PSRAM stack is the real-world default |
+| Key rollover (physical) | protocol supports | **UP+LEFT+SHIFT = OK (3-key)**. +ENTER ghosts into phantom TAB; ENTER never registers | — | matrix ghosting past 3 keys. **Handbrake = SHIFT confirmed viable. Never design for 4 simultaneous.** |
+| Poll interval | 20 Hz cap (code) | 20 Hz (code-confirmed; edges delivered in batches, none lost) | — | worst-case delivery ≈ 50 ms + scan + I2C ≈ 60 ms |
+| `drawPlane` 240-line cost | ~5 ms class | (M1 spike) | (M1 spike) | |
+| Sim step (2× bicycle) | ≤2 ms budget | (M1) | (M1) | |
+
+Frame-rate conclusion (falls out of the measurement, per spec): **30 fps is
+comfortable at 200 MHz** (13.1 ms viewport DMA overlaps sim+render inside a
+33.3 ms frame) and **60 fps is plausibly reachable at 200 MHz** if sim+render
+stay ≤16.6 ms — decide at M4 with the real renderer profile. 300 MHz buys CPU
+at a direct display-rate cost (43 fps full-frame cap); only worth it if the sim
+step or renderer needs the cycles — revisit after M1/M2 benchmarks.
+
+Gotchas recorded for the project:
+- Native `sys->log` lines print WITHOUT the `[APP]` prefix on hardware (Lua has
+  the prefix). Grep for the raw message when reading hardware captures.
+- newlib-nano: no `%f`, and `%llu` prints garbage — use 32-bit fixed-point.
+- MCP `keypress esc` delivers char 27 via `getChar()`, NOT `BTN_ESC` — apps that
+  only poll `getButtons()` will never see it (hello_c exits because it also
+  checks `getChar()`). Physical ESC sets the button bit. Design Rally to accept
+  both, or use `shouldExit()` (menu path) as the primary exit.
+- Re-pushing an app that is RUNNING fails at unzip ("write failed") — exit first.
+- Sim cannot measure flush time: every present is rate-paced to 60 Hz there
+  (16.67 ms measured for all three bench variants — identical, i.e. paced, not wire).
+- Clock retune on app start is visible and correct in the serial log
+  (QMI div=3@200 → div=4@300, SCK 66.7→75 MHz; PIO PSRAM 33.3→50 MHz).
 
 ### 0.10 PixelLab
 
@@ -272,10 +294,12 @@ input poll-rate adaptivity, `flushRegion_nocopy` exposure, crypto in sim.
 ## 2. Open questions carried to M1
 
 1. Mode 7 vs orthographic — M1 spike with measured numbers, decide together.
-2. Does the STM32 scanner pass 3-key chords? (§0.7 test) — affects control design.
-3. Is 20 Hz input + 50 ms worst-case latency acceptable feel at 180 ms steer ramp?
-   Measure, then decide if a PicOS input-path improvement is worth proposing.
-4. 300 MHz for Rally? (+50 % CPU, −25 % display rate; doom uses it.) Decide after
-   measuring sim+render cost at 200 MHz.
+2. ~~Does the STM32 scanner pass 3-key chords?~~ **ANSWERED: yes for
+   arrows+SHIFT; 4th key ghosts. Controls must fit in 3 simultaneous.**
+3. ~~Is 20 Hz input acceptable?~~ Deferred to M2 feel test with the user driving;
+   the 180 ms steer ramp + assist is designed around it. If it feels bad, the fix
+   is a PicOS-level poll-rate change, proposed then with data.
+4. 300 MHz for Rally? Measured cost: full-frame cap drops 57→43 fps. Decide after
+   M1/M2 CPU benchmarks — default is 200 MHz.
 5. Suspend/resume: does PicOS background apps? (Believed no — launcher is modal.
    Confirm; if so, ask user whether in scope.)
