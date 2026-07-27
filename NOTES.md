@@ -392,9 +392,127 @@ about surfaces again, suspect a sampling offset before touching the model.**
 arrows steer, BACKSPACE handbrake. F1 projection, F2 pace, F3 autopilot,
 F9 debug overlay. Chars: m/p/d/r/h/-/=/[/]/0-2 (+ ESC exit).
 
-**Left for M3+:** assist dial still at 0.60 default (user had no complaint —
-revisit if the stage feels too caught); per-wheel (not per-axle) surfaces
-when the baked grid lands; the 20 Hz input poll — not raised again, ramps
-tuned around it successfully.
+## 5. M3 — track (2026-07-27, user-approved: "stage reads — close M3")
+
+**The stage**: `tracks/stage01.toml` — 36-node Catmull-Rom centreline, 2670 m,
+est 98 s. Sugarcane flats sweepers → bitumen township chicane (sev 5) →
+paperbark esses (sev 2-5) with two hairpins (sev 5/6) + creek splash on the
+hairpin-2 exit straight → headland crest-jump → sand descent to the beach.
+22 pacenotes, 12 checkpoints (~8 s apart), 4 m surface grid. Iterated via
+`trackbake.py profile` (length/radii/severity/est-time print) until the
+profile matched the spec.
+
+**trackbake** (offline, deterministic): racing line at 2 m, target speeds
+sqrt(mu·g·r) with backward-braking sweep, pacenotes (severity from radius,
+tightens/opens from curvature trend, one caution per flagged region),
+checkpoints, surface grid (line corridor painted per surface, ±6 m water
+override at water_splash nodes), 4-aligned blob. Water bog is a REAL zone
+(traction cap: engine ≤ mu·load = 0.35×5790 N — the creek costs ~2 s).
+
+**core/track**: blob parses in place; track_closest uses a cursor (O(1)
+amortized); two-segment projection for fractional index; surface provider
+plugs into the sim's per-axle lookup. **core/ai**: pure-pursuit driver —
+countersteer damping, anti-spin yaw cut, traction control, low-speed/water
+recovery, monotonic line-index clamp (stops hairpin return-leg teleports),
+off-course rejoin with rejoin-braking. The AI is the completability harness,
+the demo autopilot, and later the ghost baseline.
+
+**Completability (headless, 33/33)**: AI finishes in 139 s, max excursion
+10.4 m at the hairpin-creek, offroad 2.7 s, deterministic replay identical.
+Thresholds calibrated to the pursuit AI (15 m/5 s) — a broken stage blows
+far past (50 m/12 s measured when broken). Iterate took SIX AI fixes +
+ONE geometry fix (creek moved off the hairpin-apex to the exit straight).
+
+**App**: intro → countdown → racing → finish + retry; sim-time stage timer
+(deterministic), checkpoint splits, off-course 3 s → +5 s + line respawn at
+40 % speed, pacenote queue (2.5 s lead, 3 s display), surface-grid renderer
+(~14 ms full-frame — M4's tile blitter replaces it; rnd 16.4 ms with the
+finish overlay is over budget, noted).
+
+**Bug of the milestone**: countdown held brake=1.0 → reverse creep → the
+car rolled off the line during 3-2-1 → false +5 s penalty at GO (the AI's
+148 s hardware run included it; true time ~143 s). Countdown now freezes
+the car. Lesson: any "hold still" that goes through the sim's inputs can
+trip secondary rules — hold state directly instead.
+
+**AI est vs actual**: baker est 98 s (target-speed integral); pursuit AI
+runs 139 s. The gap is pursuit limitations at hairpins + conservative
+margins (0.85× targets). Humans will land between.
+
+**Sim check**: M3 build verified in the simulator via raw RPC
+(--launch/--port, inject_char, screenshot) — launch, countdown, ground,
+car, HUD all render. RPC works headless with SDL_VIDEODRIVER=dummy.
 
 
+
+
+## 6. M4 — assets + renderer (2026-07-27)
+
+**Palette lock.** `assets/style.toml` (assets worktree): 48 locked colours,
+seed 20260726. CLUT = 48 locked + 4 derived shade steps each (192) +
+reserved; index 255 = sprite mask. `tools/rallypalette.py` derives the CLUT,
+snaps PixelLab PNGs to the locked palette (nearest, weighted-RGB, no dither),
+writes `clut.bin` (256 × byte-swapped RGB565 — back-buffer order; caught and
+fixed before hardware, sim/host would have shown swap-garbage).
+
+**Pipeline** (rally worktree `apps/rally/tools/`): `fetch_assets.py`
+(download + sheet montage), `tilebake.py` (32→16 downscale, palettize, atlas;
+`--keys` with src/rot/crop per entry; `--meta` mode reads PixelLab Wang
+metadata JSON and crops by `bounding_box` — positional slicing is explicitly
+wrong per PixelLab docs and produces banding), `spritebake.py` (rotate-then-
+downsample; `--sources` mode picks nearest of 8 PixelLab rotations and
+rotates only the delta → 32 crisp headings), `procgen_road.py` (procedural
+road tiles), `palettize.py` (generic). Every bin gets a manifest.json entry
+with sha256 of source + output.
+
+**PixelLab assets** (~285 generations of 1916): 3 Wang terrain sets
+(water↔sand, sand↔grass, grass↔gravel — chained via base_tile_ids), car as
+8-direction object (the 1-direction "top-down" mode drew side views twice —
+**use create_8_direction_object for vehicles**), 24 props in ONE batched
+64-candidate call (item_descriptions per slot), HUD panel, 8px font
+(integration deferred to M5), hero side-view car for intro/results screens.
+
+**Road art failure + pivot.** PixelLab `create_path_tiles` RPG path sets
+(~100 gens, 3 sets) are unusable for a rally road: art assumes 1-tile-wide
+paths with baked decorative borders; interior corridor cells map to
+crossroads art with grass corners → road read as broken fence segments.
+Pivoted to procedural: `procgen_road.py` bakes speckled `roadfill_*` fills
+(gravel/bitumen/sand from locked palette colours) + 50/50 `dither_*` edge
+tiles; corridor cells get fill, verge cells get masked dither. Result reads
+as a proper road at zero art risk. Path bins kept on disk, unused.
+
+**Blob v2.** After the surface grid: `gw*gh*5` u16 tilemap slots (wang base
++ up to 3 stacked transition layers + road overlay, 0xFFFF = none) +
+512-cap prop scatter (FNV-seeded, 2-cell corridor keep-clear, grass/sand
+weighted picks). Wang corner logic stacks pairwise sets bottom-up over
+terrain levels water<sand<grass<gravel. Corridor cells render as road
+overlay; creek-splash cells render as water terrain (no overlay). Blob
+1.12MB (tilemap is 984KB — fine in PSRAM). `track_load` parses v1+v2.
+
+**Renderer** (`core/gfx.c` + `render_track.c`): 8bpp tiles in PSRAM, per-
+pixel CLUT expand straight into the 16bpp back buffer. No rotation (camera
+is world-fixed) → axis-aligned tile blits, screen offset rounded once (no
+tile jitter). 320×240 viewport + 320×80 HUD strip, `flushRows(0,239)` +
+`flushRows(240,319)`. Off-grid cells blit the grass fill tile (viewport
+always full). Car = 32-heading sprite, yaw → `round(h*32/2π) & 31`.
+
+**Measured on hardware @200MHz** (300-frame averages, AI driving):
+sim 0.61ms, render 10.4ms, present 13.1ms → ~24ms/frame uncapped (~41fps).
+**Frame lock: 30fps** (33.3ms budget, 9ms slack). 60fps is DMA-impossible:
+13.07+4.52 = 17.6ms DMA per frame > 16.6ms period. Render cost ≈ the M3
+sampler (10.4 vs 11.7ms full-frame) — CLUT expand per pixel over ~500 tile
+blits; acceptable.
+
+**Verification.** Headless 40/40 (new: tilemap range, every-cell-base,
+overlay count, prop count/types, asset load, ground-render non-uniform);
+AI completability unchanged (139.0s deterministic on v2 blob). Sim: intro/
+racing shots correct via RPC. Hardware: assets load, intro/hero plate,
+racing at 48km/h, AI finished full stage on device — 139.310s, CP 12/12,
+pen 0s — results screen + best time. First real-art screenshots: intro,
+gravel racing, results (this section's proof).
+
+**Deferred to M5**: PixelLab 8px font integration (glyph atlas → HUD),
+HUD panel art as screen furniture, ruts (directional overlay along the
+racing line, not baked tiles), grass fill variants if uniformity bothers,
+sand-road/terrain contrast check with user, gravel hue check (reads salmon
+on LCD?).

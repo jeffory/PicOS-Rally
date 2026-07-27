@@ -6,14 +6,14 @@
 
 typedef struct {
     uint32_t magic;
-    uint16_t version, num_nodes, num_points, num_notes, num_cps, gw, gh, _pad;
+    uint16_t version, num_nodes, num_points, num_notes, num_cps, gw, gh, num_props;
     float ox, oy, cell;
 } track_header_t;
 
 bool track_load(track_t *t, const void *blob, int size) {
     if (!blob || size < (int)sizeof(track_header_t)) return false;
     const track_header_t *h = (const track_header_t *)blob;
-    if (h->magic != TRACK_MAGIC || h->version != 1) return false;
+    if (h->magic != TRACK_MAGIC || (h->version != 1 && h->version != 2)) return false;
 
     const uint8_t *p = (const uint8_t *)blob + sizeof(track_header_t);
     const uint8_t *end = (const uint8_t *)blob + size;
@@ -38,6 +38,22 @@ bool track_load(track_t *t, const void *blob, int size) {
     int grid_bytes = h->gw * h->gh;
     if (p + grid_bytes > end) return false;
     t->grid = p;
+    p += grid_bytes;
+
+    t->tilemap = 0;
+    t->num_props = 0;
+    t->props = 0;
+    if (h->version >= 2) {
+        int tm_bytes = grid_bytes * TRACK_TILEMAP_SLOTS * 2;
+        if (p + tm_bytes > end) return false;
+        t->tilemap = (const uint16_t *)p;
+        p += tm_bytes;
+        if (h->num_props) {
+            if (p + h->num_props * sizeof(track_prop_t) > end) return false;
+            t->num_props = h->num_props;
+            t->props = (const track_prop_t *)p;
+        }
+    }
 
     t->ox = h->ox; t->oy = h->oy; t->cell = h->cell;
     t->gw = h->gw; t->gh = h->gh;

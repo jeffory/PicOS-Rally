@@ -14,6 +14,9 @@
 #include "../../core/surface.h"
 #include "../../core/track.h"
 #include "../../core/ai.h"
+#include "../../core/gfx.h"
+#include "../../core/render_track.h"
+#include "../../core/tiles_sections.h"
 
 static int s_checks = 0, s_failures = 0;
 
@@ -318,6 +321,77 @@ int main(int argc, char **argv) {
                   st2 == steps);
             printf("# AI replay hash: %08lx\n", (unsigned long)sim_state_hash(&c2));
         }
+    }
+    // ── 9c. M4: tilemap + props (blob v2) + gfx pipeline on real assets ────
+    if (blob && track.tilemap) {
+        int total_tiles = 0;
+        for (int i = 0; i < TILE_SEC_COUNT; i++) total_tiles += TILE_SEC_SIZES[i];
+        int cells = track.gw * track.gh;
+        int bad = 0, overlays = 0, bases = 0;
+        for (int i = 0; i < cells * TRACK_TILEMAP_SLOTS; i++) {
+            uint16_t v = track.tilemap[i];
+            if (v != TRACK_NO_TILE && v >= total_tiles) bad++;
+        }
+        for (int i = 0; i < cells; i++) {
+            const uint16_t *sl = track.tilemap + i * TRACK_TILEMAP_SLOTS;
+            if (sl[0] != TRACK_NO_TILE) bases++;
+            if (sl[TRACK_TILEMAP_SLOTS - 1] != TRACK_NO_TILE) overlays++;
+        }
+        CHECK("tilemap indices in range", bad == 0);
+        CHECK("every cell has a base tile", bases == cells);
+        CHECK("road overlays present", overlays > 1000);
+        CHECK("props scattered (100..512)", track.num_props > 100 && track.num_props <= 512);
+        int pb = 0;
+        for (int i = 0; i < track.num_props; i++) if (track.props[i].type >= 24) pb++;
+        CHECK("prop types in range", pb == 0);
+
+        // gfx smoke: render the stage start through the real asset pipeline
+        uint16_t *clut = 0;
+        uint8_t *secs[TILE_SEC_COUNT];
+        memset(secs, 0, sizeof(secs));
+        int assets_ok = 1;
+        FILE *f = fopen("../../assets/clut.bin", "rb");
+        if (f) {
+            clut = malloc(512);
+            if (!clut || fread(clut, 1, 512, f) != 512) assets_ok = 0;
+            fclose(f);
+        } else assets_ok = 0;
+        for (int i = 0; i < TILE_SEC_COUNT && assets_ok; i++) {
+            char path[256];
+            snprintf(path, sizeof(path), "../../assets/tiles_%s.bin", TILE_SEC_NAMES[i]);
+            f = fopen(path, "rb");
+            if (!f) { assets_ok = 0; break; }
+            secs[i] = malloc((size_t)TILE_SEC_SIZES[i] * 256);
+            if (!secs[i] || fread(secs[i], 1, (size_t)TILE_SEC_SIZES[i] * 256, f)
+                    != (size_t)TILE_SEC_SIZES[i] * 256) assets_ok = 0;
+            fclose(f);
+        }
+        CHECK("M4 assets load (clut + tile sections)", assets_ok);
+        if (assets_ok) {
+            gfx_t g;
+            gfx_init(&g, clut, (const uint8_t **)secs,
+                     TILE_SEC_BASES, TILE_SEC_SIZES, TILE_SEC_COUNT);
+            uint16_t *fb2 = calloc(320 * 240, 2);
+            car_t cs;
+            float x, y, dx, dy, tv;
+            track_line_at(&track, 0.0f, &x, &y, &dx, &dy, &tv);
+            sim_init(&cs, x, y, mx_atan2(dx, dy));
+            camera_t cam;
+            camera_init(&cam, &cs);
+            render_track_ground_gfx(&g, fb2, &cam, &track, 240);
+            // ground must not be uniform: count distinct colours in a sample
+            uint32_t seen[16] = {0};
+            for (int i = 0; i < 320 * 240; i++)
+                for (int b = 0; b < 16; b++)
+                    if (fb2[i] == (uint16_t)b * 4096 + fb2[i] % 4096) { seen[b]++; break; }
+            int distinct = 0;
+            for (int i = 1; i < 320 * 240; i++)
+                if (fb2[i] != fb2[i - 1]) distinct++;
+            CHECK("ground render non-uniform", distinct > 200);
+            free(fb2);
+        }
+        free(clut);
+        for (int i = 0; i < TILE_SEC_COUNT; i++) free(secs[i]);
     }
     free(blob);
 

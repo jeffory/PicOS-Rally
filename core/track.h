@@ -7,9 +7,15 @@
 
 #define TRACK_MAGIC 0x47545352u  // 'RSTG'
 
+// blob v2: after the surface grid come gw*gh*TRACK_TILEMAP_SLOTS u16 tilemap
+// entries (global tile indices, 0xFFFF = skip) then num_props prop records.
+#define TRACK_TILEMAP_SLOTS 5
+#define TRACK_NO_TILE 0xFFFF
+
 typedef struct { float x, y, width; uint8_t surface, flags, _pad[2]; } track_node_t;
 typedef struct { float x, y, target_v, half_w; uint8_t surface, flags, _pad[2]; } track_point_t;
 typedef struct { float dist; uint8_t len; char text[31]; } track_note_t;
+typedef struct { int32_t x_dm, y_dm; uint8_t type, _pad[3]; } track_prop_t;
 
 typedef struct {
     // parsed views into the blob
@@ -21,6 +27,10 @@ typedef struct {
     float ox, oy, cell;
     int gw, gh;
     const uint8_t *grid;
+    // v2: baked tilemap + props (NULL/0 on v1 blobs)
+    const uint16_t *tilemap;   // gw*gh*TRACK_TILEMAP_SLOTS global tile indices
+    int num_props;
+    const track_prop_t *props;
     float length;                                   // stage length in m
     // cursor for accelerated closest-point queries (monotonic progress)
     int cursor;

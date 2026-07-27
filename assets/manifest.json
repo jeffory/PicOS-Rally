@@ -1,0 +1,90 @@
+{
+  "car": {
+    "bin": "car.bin",
+    "bin_sha256": "aace426f2573b2256f222187eb82ba03754637c70d8a6e14a73321763401289a",
+    "fmt": "idx8-sheet",
+    "frames": 32,
+    "h": 32,
+    "src": "car_sources.json",
+    "w": 32
+  },
+  "hero": {
+    "bin": "hero.bin",
+    "bin_sha256": "e22bf59f5d1797bfd272fe1b964fa225496f208506d1b6542e70092e45bb4f88",
+    "fmt": "idx8",
+    "h": 64,
+    "src": "hero_car.png",
+    "src_sha256": "8b1faf97ff8f6e435403c75d1af39b91ba2b3614749809b8d43454fb93561979",
+    "w": 64
+  },
+  "path_bitumen": {
+    "bin": "tiles_path_bitumen.bin",
+    "bin_sha256": "5da8ff324eb91d23e0ef5a23c852466cf19b325f4d38ec44caa23a29bb8553ae",
+    "fmt": "idx8-tiles",
+    "src": "path_bitumen.png",
+    "src_sha256": "420a83464594e6f3526f13890ccde73611babd96125710457254b682f46e1478",
+    "tile_px": 16,
+    "tiles": 20
+  },
+  "path_grass": {
+    "bin": "tiles_path_grass.bin",
+    "bin_sha256": "7fb730567b22fdc53aa0d1d98d27e56afc6427e6b0eeaf050d3b92cfb21c9f9d",
+    "fmt": "idx8-tiles",
+    "src": "path_grass.png",
+    "src_sha256": "fdfd5b663d952b8a37659f35026834d855d514d018be60280c019e7e219a6ccf",
+    "tile_px": 16,
+    "tiles": 24
+  },
+  "path_sand": {
+    "bin": "tiles_path_sand.bin",
+    "bin_sha256": "3e777b6e35ab6f707967241a251f6c8cc8513c88427a5491d5fd54229a5a0148",
+    "fmt": "idx8-tiles",
+    "src": "path_sand.png",
+    "src_sha256": "f6a45ad7d1bd38b049c14bba39619687682e57cf0c9b6efd7f8104a60c6dd964",
+    "tile_px": 16,
+    "tiles": 23
+  },
+  "proc": {
+    "bin": "tiles_proc.bin",
+    "bin_sha256": "f6fb80d7b277b28528cb558f491751cdd515037ed3e11e8c02811ecf3a0f508b",
+    "fmt": "idx8-tiles",
+    "src": "procgen_road.py",
+    "tile_px": 16,
+    "tiles": 6
+  },
+  "props": {
+    "bin": "props.bin",
+    "bin_sha256": "cba1111a77417eb44ebdb1e008af5d0cd9b5daf981a6afcbe0566cca54b6819d",
+    "fmt": "idx8-sprites",
+    "size": 32,
+    "sprites": 24,
+    "src": "prop_*.png (24)"
+  },
+  "wang_grass_gravel": {
+    "bin": "tiles_wang_grass_gravel.bin",
+    "bin_sha256": "d6b17f985f888e501e62caa07ec397f663983b5e500d0cab0f94cbf8897aa87b",
+    "fmt": "idx8-tiles",
+    "src": "wang_grass_gravel.png",
+    "src_sha256": "1f39334d5689ea28017d404157e7899959f55c1cb3a7b94e5b94931161399eb4",
+    "tile_px": 16,
+    "tiles": 16
+  },
+  "wang_sand_grass": {
+    "bin": "tiles_wang_sand_grass.bin",
+    "bin_sha256": "fe9828679c73ddf156399f1c62ffd2846145eb4cc622ac59d427ac3a34a55130",
+    "fmt": "idx8-tiles",
+    "src": "wang_sand_grass.png",
+    "src_sha256": "fbbc8b18205054c14ab01d508524b29eede140074644246e0aeeb7ff0d26b365",
+    "tile_px": 16,
+    "tiles": 16
+  },
+  "wang_water_sand": {
+    "bin": "tiles_wang_water_sand.bin",
+    "bin_sha256": "78e04fda3c8e5efbcb89b105caba767e29d45d28b44d4cc1377ab42d408a7024",
+    "fmt": "idx8-tiles",
+    "src": "wang_water_sand.png",
+    "src_sha256": "765b2d141b3bd8f1b0e9fa256ce45cee4ed0a5344cc46616f20a6e61736f44b1",
+    "tile_px": 16,
+    "tiles": 16
+  }
+}

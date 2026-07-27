@@ -1,4 +1,4 @@
-// PicOS Rally — M3: stage, race flow, pacenotes, splits.
+// PicOS Rally — M4: real art, tile renderer, viewport/HUD split.
 // App layer: PicOS API glue only. Game logic lives in core/ (no PicOS headers).
 //
 // Drive: F5 throttle, F4 brake/reverse, LEFT/RIGHT steer, BACKSPACE handbrake.
@@ -19,12 +19,30 @@
 #include "../core/track.h"
 #include "../core/ai.h"
 #include "../core/render_track.h"
+#include "../core/gfx.h"
+#include "../core/tiles_sections.h"
 
 static const PicoCalcAPI *s_api;
+
+// palette indices into the CLUT (style.toml order)
+enum {
+    PAL_SCRUB_DEEP, PAL_GRASS_MID, PAL_GRASS_DRY, PAL_SPINIFEX, PAL_CANE, PAL_DUNE,
+    PAL_GRAVEL_DEEP, PAL_GRAVEL_MID, PAL_GRAVEL_LIGHT, PAL_GRAVEL_DUST, PAL_RUT,
+    PAL_SAND_WET, PAL_SAND_DRY, PAL_SAND_LIGHT, PAL_SAND_SHADOW,
+    PAL_BIT_DEEP, PAL_BIT_MID, PAL_BIT_LIGHT, PAL_LINE_WHITE,
+    PAL_WATER_DEEP, PAL_WATER_MID, PAL_WATER_LIGHT, PAL_WATER_FOAM, PAL_CREEK,
+    PAL_MUD_DEEP, PAL_MUD_MID, PAL_MUD_LIGHT,
+    PAL_CAR_WHITE, PAL_CAR_RED, PAL_CAR_BLUE, PAL_CAR_BLACK, PAL_CAR_GLASS, PAL_CAR_CHROME,
+    PAL_GUM_BARK, PAL_GUM_LEAF, PAL_DEAD_WOOD, PAL_ROCK, PAL_SIGN_RED, PAL_SIGN_YELLOW,
+    PAL_DUST, PAL_SHADOW, PAL_SKID, PAL_CREST,
+    PAL_HUD_AMBER, PAL_HUD_AMBER_DIM, PAL_HUD_PANEL, PAL_HUD_PANEL_LIT, PAL_HUD_TEXT,
+};
 
 static const char *const SURF_NAMES[SURF_COUNT] = {
     "BITUMEN", "GRAVEL", "SAND", "GRASS", "MUD", "WATER",
 };
+
+#define VP_H 240   // viewport rows; HUD owns rows VP_H..319
 
 // ── Race states ─────────────────────────────────────────────────────────────
 typedef enum {
@@ -61,18 +79,82 @@ static ai_state_t s_ai;
 static int s_autopilot = 0;
 static surface_src_t s_tsrc;
 
-// Surface palette (big-endian, indexed by SURF_*): matches the M2 oval look.
+// M4 gfx state: CLUT + tile sections + sprite sheets, all in PSRAM.
+static gfx_t s_gfx;
+static uint16_t *s_clut;              // 256 entries
+static uint8_t *s_tile_secs[TILE_SEC_COUNT];
+static uint8_t *s_car;                // 32 headings x 32x32 8bpp
+static uint8_t *s_props;              // 24 x 32x32 8bpp
+static uint8_t *s_hero;               // 64x64 8bpp intro art
+#define CAR_SPRITE 32
+#define PROP_SPRITE 32
+#define HERO_SPRITE 64
+
+// Legacy flat palette for the v1-blob fallback renderer only.
 static uint16_t s_palette[8];
 
 static void palette_init(void) {
-    s_palette[SURF_BITUMEN] = rgb565_be(7, 8, 9);    // dark grey
-    s_palette[SURF_GRAVEL]  = rgb565_be(13, 8, 5);   // red ochre
-    s_palette[SURF_SAND]    = rgb565_be(22, 18, 9);  // tan
-    s_palette[SURF_GRASS]   = rgb565_be(4, 13, 5);   // scrub green
+    s_palette[SURF_BITUMEN] = rgb565_be(7, 8, 9);
+    s_palette[SURF_GRAVEL]  = rgb565_be(13, 8, 5);
+    s_palette[SURF_SAND]    = rgb565_be(22, 18, 9);
+    s_palette[SURF_GRASS]   = rgb565_be(4, 13, 5);
     s_palette[SURF_MUD]     = rgb565_be(8, 6, 4);
-    s_palette[SURF_WATER]   = rgb565_be(3, 14, 18);  // turquoise
+    s_palette[SURF_WATER]   = rgb565_be(3, 14, 18);
     s_palette[6]            = rgb565_be(2, 6, 3);
     s_palette[7]            = rgb565_be(2, 6, 3);
+}
+
+// Read an asset file into a PSRAM allocation. Returns NULL on failure.
+static void *load_bin(const PicoCalcAPI *api, const char *app_dir,
+                      const char *name, int expect_sz) {
+    char path[256];
+    snprintf(path, sizeof(path), "%s/assets/%s", app_dir, name);
+    pcfile_t f = api->fs->open(path, "rb");
+    if (!f) {
+        api->sys->log("RALLY: missing asset %s", name);
+        return 0;
+    }
+    int sz = api->fs->size(path);
+    if (expect_sz && sz != expect_sz) {
+        api->sys->log("RALLY: asset %s size %d != %d", name, sz, expect_sz);
+        api->fs->close(f);
+        return 0;
+    }
+    void *buf = api->psram->qmiAlloc((uint32_t)sz);
+    if (!buf) {
+        api->sys->log("RALLY: asset %s alloc %d failed", name, sz);
+        api->fs->close(f);
+        return 0;
+    }
+    int n = api->fs->read(f, buf, sz);
+    api->fs->close(f);
+    if (n != sz) {
+        api->sys->log("RALLY: asset %s read %d/%d", name, n, sz);
+        api->psram->qmiFree(buf);
+        return 0;
+    }
+    return buf;
+}
+
+static int load_assets(const PicoCalcAPI *api, const char *app_dir) {
+    s_clut = load_bin(api, app_dir, "clut.bin", 512);
+    if (!s_clut) return 0;
+    for (int i = 0; i < TILE_SEC_COUNT; i++) {
+        char name[64];
+        snprintf(name, sizeof(name), "tiles_%s.bin", TILE_SEC_NAMES[i]);
+        s_tile_secs[i] = load_bin(api, app_dir, name,
+                                  TILE_SEC_SIZES[i] * 256);
+        if (!s_tile_secs[i]) return 0;
+    }
+    gfx_init(&s_gfx, s_clut, (const uint8_t **)s_tile_secs,
+             TILE_SEC_BASES, TILE_SEC_SIZES, TILE_SEC_COUNT);
+    s_car = load_bin(api, app_dir, "car.bin", 32 * CAR_SPRITE * CAR_SPRITE);
+    s_props = load_bin(api, app_dir, "props.bin", 24 * PROP_SPRITE * PROP_SPRITE);
+    s_hero = load_bin(api, app_dir, "hero.bin", HERO_SPRITE * HERO_SPRITE);
+    if (!s_car || !s_props || !s_hero) return 0;
+    api->sys->log("RALLY: assets loaded (clut, %d tile secs, car, props, hero)",
+                  TILE_SEC_COUNT);
+    return 1;
 }
 
 // ── Input plumbing (poll wrapper: edges must be accumulated at EVERY poll) ──
@@ -205,6 +287,49 @@ static void race_step(race_t *r, car_t *car, float dt) {
     }
 }
 
+// ── M4 render helpers ───────────────────────────────────────────────────────
+static void render_car_sprite(uint16_t *fb, const camera_t *cam, const car_t *car) {
+    float h = car->heading;
+    while (h < 0.0f) h += 6.2831853f;
+    while (h >= 6.2831853f) h -= 6.2831853f;
+    int idx = (int)(h * (32.0f / 6.2831853f) + 0.5f) & 31;
+    int sx = (int)((car->x - cam->x) * RENDER_PX_PER_M) + GFX_FB_W / 2 - CAR_SPRITE / 2;
+    int sy = (int)((car->y - cam->y) * RENDER_PX_PER_M) + VP_H / 2 - CAR_SPRITE / 2;
+    gfx_blit_sprite(&s_gfx, fb, VP_H, s_car + idx * CAR_SPRITE * CAR_SPRITE,
+                    CAR_SPRITE, CAR_SPRITE, sx, sy);
+}
+
+static void render_hud(uint16_t *fb, const race_t *r, const car_t *car) {
+    gfx_fill(&s_gfx, fb, 320, 0, VP_H, 320, 320 - VP_H, PAL_HUD_PANEL);
+    gfx_fill(&s_gfx, fb, 320, 0, VP_H, 320, 1, PAL_HUD_AMBER);
+    char line[64];
+    // left: stage timer + penalty
+    float tf = r->stage_s + r->penalty_s;
+    uint32_t tms = (uint32_t)(tf * 1000.0f);
+    snprintf(line, sizeof(line), "%lu:%02lu.%03lu",
+             (unsigned long)(tms / 60000),
+             (unsigned long)((tms % 60000) / 1000),
+             (unsigned long)(tms % 1000));
+    gfx_text(&s_gfx, fb, 320, 6, VP_H + 8, line, PAL_HUD_TEXT);
+    snprintf(line, sizeof(line), "pen %lus", (unsigned long)r->penalty_s);
+    gfx_text(&s_gfx, fb, 320, 6, VP_H + 20, line, PAL_HUD_AMBER_DIM);
+    // centre: pacenote / split
+    if (r->note) {
+        gfx_text(&s_gfx, fb, 320, 110, VP_H + 8, r->note->text, PAL_HUD_AMBER);
+    }
+    if (r->last_split_idx >= 0) {
+        snprintf(line, sizeof(line), "CP %d/%d", r->next_cp, s_track.num_cps);
+        gfx_text(&s_gfx, fb, 320, 110, VP_H + 20, line, PAL_HUD_AMBER_DIM);
+    }
+    // right: speed + distance
+    snprintf(line, sizeof(line), "%ld", (long)(car->vx * 3.6f));
+    gfx_text(&s_gfx, fb, 320, 320 - 6 - gfx_text_width(line), VP_H + 8,
+             line, PAL_HUD_TEXT);
+    gfx_text(&s_gfx, fb, 320, 320 - 6 - 30, VP_H + 20, "km/h", PAL_HUD_AMBER_DIM);
+    snprintf(line, sizeof(line), "%ldm", (long)r->car_dist);
+    gfx_text(&s_gfx, fb, 320, 6, VP_H + 34, line, PAL_HUD_AMBER_DIM);
+}
+
 void picos_main(const PicoCalcAPI *api,
                 const char *app_dir, const char *app_id, const char *app_name) {
     (void)app_id; (void)app_name;
@@ -218,6 +343,14 @@ void picos_main(const PicoCalcAPI *api,
         d->clear(0);
         d->drawText(8, 8, "stage01.bin missing or bad", 0xF800, 0);
         d->drawText(8, 20, "run tools/trackbake.py bake", 0xFFFF, 0);
+        d->flush();
+        for (int i = 0; i < 300; i++) api->sys->poll();
+        return;
+    }
+    if (!load_assets(api, app_dir)) {
+        d->clear(0);
+        d->drawText(8, 8, "assets missing (assets/*.bin)", 0xF800, 0);
+        d->drawText(8, 20, "run the M4 bake tools", 0xFFFF, 0);
         d->flush();
         for (int i = 0; i < 300; i++) api->sys->poll();
         return;
@@ -313,57 +446,47 @@ void picos_main(const PicoCalcAPI *api,
         // ── Render ──────────────────────────────────────────────────────────
         uint64_t r0 = api->sys->getTimeUs();
         fb.fb = d->getBackBuffer();
+        int hud_dirty = 1;
         if (s_race.state == RS_INTRO) {
-            render_clear(&fb, s_palette[SURF_GRASS]);
-            render_track_ground(&fb, &cam, &s_track, s_palette);
-            render_track_line(&fb, &cam, &s_track, rgb565_be(31, 63, 31));
-            render_car(&fb, &cam, &car, rgb565_be(28, 4, 4), rgb565_be(31, 63, 31));
-            render_text(&fb, 68, 40, "COOLOOLA POINT", rgb565_be(31, 63, 31), 0);
-            render_text(&fb, 62, 56, "2.7km gravel / shakedown", rgb565_be(24, 48, 24), 0);
-            render_text(&fb, 88, 270, "F5 to start", rgb565_be(31, 63, 31), 0);
+            render_track_ground_gfx(&s_gfx, fb.fb, &cam, &s_track, VP_H);
+            render_track_props_gfx(&s_gfx, fb.fb, &cam, &s_track, VP_H,
+                                   s_props, PROP_SPRITE);
+            render_car_sprite(fb.fb, &cam, &car);
+            // title plate: hero art + text over a dimmed band
+            gfx_fill(&s_gfx, fb.fb, VP_H, 40, 90, 240, 96, PAL_HUD_PANEL);
+            gfx_fill(&s_gfx, fb.fb, VP_H, 40, 90, 240, 2, PAL_HUD_AMBER);
+            gfx_fill(&s_gfx, fb.fb, VP_H, 40, 184, 240, 2, PAL_HUD_AMBER);
+            gfx_blit_sprite(&s_gfx, fb.fb, VP_H, s_hero, HERO_SPRITE, HERO_SPRITE,
+                            52, 106);
+            gfx_text(&s_gfx, fb.fb, VP_H, 128, 118, "COOLOOLA POINT", PAL_HUD_AMBER);
+            gfx_text(&s_gfx, fb.fb, VP_H, 128, 134, "2.7km gravel / shakedown", PAL_HUD_TEXT);
+            gfx_text(&s_gfx, fb.fb, VP_H, 128, 162, "F5 to start", PAL_HUD_AMBER);
         } else {
-            render_track_ground(&fb, &cam, &s_track, s_palette);
-            render_track_line(&fb, &cam, &s_track, rgb565_be(20, 40, 20));
-            render_car(&fb, &cam, &car, rgb565_be(28, 4, 4), rgb565_be(31, 63, 31));
+            render_track_ground_gfx(&s_gfx, fb.fb, &cam, &s_track, VP_H);
+            render_track_props_gfx(&s_gfx, fb.fb, &cam, &s_track, VP_H,
+                                   s_props, PROP_SPRITE);
+            render_car_sprite(fb.fb, &cam, &car);
 
-            // HUD strip (bottom 40 px)
-            render_fill_rect(&fb, 0, 280, 320, 40, rgb565_be(0, 0, 0));
-            float tf = s_race.stage_s + s_race.penalty_s;
-            uint32_t tms = (uint32_t)(tf * 1000.0f);
-            snprintf(line, sizeof(line), "%lu:%02lu.%03lu",
-                     (unsigned long)(tms / 60000),
-                     (unsigned long)((tms % 60000) / 1000),
-                     (unsigned long)(tms % 1000));
-            render_text(&fb, 4, 284, line, rgb565_be(31, 63, 31), -1);
-            snprintf(line, sizeof(line), "pen %lus CP %d/%d",
-                     (unsigned long)s_race.penalty_s,
-                     s_race.next_cp, s_track.num_cps);
-            render_text(&fb, 130, 284, line, rgb565_be(24, 48, 24), -1);
-            snprintf(line, sizeof(line), "%lddm %ldkm/h",
-                     (long)(s_race.car_dist * 10.0f),
-                     (long)(car.vx * 3.6f));
-            render_text(&fb, 250, 284, line, rgb565_be(24, 48, 24), -1);
-            // pacenote
-            if (s_race.note) {
-                render_text(&fb, 60, 296, s_race.note->text,
-                            rgb565_be(31, 45, 10), -1);
-            }
             if (s_race.state == RS_COUNTDOWN) {
                 int n = (s_race.countdown / 60) + 1;
                 snprintf(line, sizeof(line), "%d", n > 3 ? 3 : n);
-                render_text(&fb, 152, 140, line, rgb565_be(31, 63, 31), 0);
+                gfx_text(&s_gfx, fb.fb, VP_H, 156, 110, line, PAL_HUD_AMBER);
             }
             if (s_race.state == RS_FINISH) {
-                render_fill_rect(&fb, 40, 120, 240, 80, rgb565_be(0, 0, 0));
+                gfx_fill(&s_gfx, fb.fb, VP_H, 40, 60, 240, 120, PAL_HUD_PANEL);
+                gfx_fill(&s_gfx, fb.fb, VP_H, 40, 60, 240, 2, PAL_HUD_AMBER);
                 uint32_t tot = (uint32_t)((s_race.stage_s + s_race.penalty_s) * 1000.0f);
                 snprintf(line, sizeof(line), "FINISH %lu.%03lu",
                          (unsigned long)(tot / 1000), (unsigned long)(tot % 1000));
-                render_text(&fb, 56, 132, line, rgb565_be(31, 63, 31), -1);
+                gfx_text(&s_gfx, fb.fb, VP_H, 56, 76, line, PAL_HUD_AMBER);
                 snprintf(line, sizeof(line), "best %lu.%03lu",
                          (unsigned long)(s_race.best_total_ms / 1000),
                          (unsigned long)(s_race.best_total_ms % 1000));
-                render_text(&fb, 56, 148, line, rgb565_be(24, 48, 24), -1);
-                render_text(&fb, 56, 172, "F5 retry  ESC quit", rgb565_be(31, 63, 31), -1);
+                gfx_text(&s_gfx, fb.fb, VP_H, 56, 92, line, PAL_HUD_TEXT);
+                gfx_text(&s_gfx, fb.fb, VP_H, 56, 118, "F5 retry", PAL_HUD_AMBER);
+                gfx_text(&s_gfx, fb.fb, VP_H, 56, 134, "ESC quit", PAL_HUD_TEXT);
+                gfx_blit_sprite(&s_gfx, fb.fb, VP_H, s_hero, HERO_SPRITE, HERO_SPRITE,
+                                200, 88);
             }
             if (s_debug) {
                 uint32_t fr = s_frames ? s_frames : 1;
@@ -371,19 +494,21 @@ void picos_main(const PicoCalcAPI *api,
                          (unsigned long)(acc_sim / fr),
                          (unsigned long)(acc_render / fr),
                          (long)(car.vx * 3.6f));
-                render_text(&fb, 4, 4, line, rgb565_be(31, 63, 31), 0);
+                gfx_text(&s_gfx, fb.fb, VP_H, 4, 4, line, PAL_HUD_TEXT);
                 snprintf(line, sizeof(line), "slp %ld off %lddm %s",
                          (long)(car.slip_rear * 100.0f),
                          (long)(s_race.car_off * 10.0f),
                          SURF_NAMES[car.surface]);
-                render_text(&fb, 4, 16, line, rgb565_be(31, 63, 31), 0);
+                gfx_text(&s_gfx, fb.fb, VP_H, 4, 16, line, PAL_HUD_TEXT);
             }
         }
+        render_hud(fb.fb, &s_race, &car);
         acc_render += (uint32_t)(api->sys->getTimeUs() - r0);
 
         // ── Present ─────────────────────────────────────────────────────────
         uint64_t p0 = api->sys->getTimeUs();
-        d->flush();
+        d->flushRows(0, VP_H - 1);
+        if (hud_dirty) d->flushRows(VP_H, 319);
         acc_present += (uint32_t)(api->sys->getTimeUs() - p0);
         s_frames++;
 
@@ -408,4 +533,9 @@ void picos_main(const PicoCalcAPI *api,
 
     api->sys->log("RALLY: exit");
     api->psram->qmiFree(s_blob);
+    api->psram->qmiFree(s_clut);
+    for (int i = 0; i < TILE_SEC_COUNT; i++) api->psram->qmiFree(s_tile_secs[i]);
+    api->psram->qmiFree(s_car);
+    api->psram->qmiFree(s_props);
+    api->psram->qmiFree(s_hero);
 }

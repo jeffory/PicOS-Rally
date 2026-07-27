@@ -1,0 +1,528 @@
+{
+ "path_bitumen": {
+  "bin": "tiles_path_bitumen.bin",
+  "entries": [
+   {
+    "index": 0,
+    "key": "path:0"
+   },
+   {
+    "index": 1,
+    "key": "path:1"
+   },
+   {
+    "index": 2,
+    "key": "path:2"
+   },
+   {
+    "index": 3,
+    "key": "path:3"
+   },
+   {
+    "index": 4,
+    "key": "path:4"
+   },
+   {
+    "index": 5,
+    "key": "path:5"
+   },
+   {
+    "index": 6,
+    "key": "path:6"
+   },
+   {
+    "index": 7,
+    "key": "path:7"
+   },
+   {
+    "index": 8,
+    "key": "path:8"
+   },
+   {
+    "index": 9,
+    "key": "path:9"
+   },
+   {
+    "index": 10,
+    "key": "path:10"
+   },
+   {
+    "index": 11,
+    "key": "path:11"
+   },
+   {
+    "index": 12,
+    "key": "path:12"
+   },
+   {
+    "index": 13,
+    "key": "path:13"
+   },
+   {
+    "index": 14,
+    "key": "path:14"
+   },
+   {
+    "index": 15,
+    "key": "path:15"
+   },
+   {
+    "index": 16,
+    "key": "pathvar:4"
+   },
+   {
+    "index": 17,
+    "key": "pathvar:7"
+   },
+   {
+    "index": 18,
+    "key": "pathvar:15"
+   },
+   {
+    "index": 19,
+    "key": "roadfill"
+   }
+  ],
+  "tile": 16
+ },
+ "path_grass": {
+  "bin": "tiles_path_grass.bin",
+  "entries": [
+   {
+    "index": 0,
+    "key": "path:0"
+   },
+   {
+    "index": 1,
+    "key": "path:1"
+   },
+   {
+    "index": 2,
+    "key": "path:2"
+   },
+   {
+    "index": 3,
+    "key": "path:3"
+   },
+   {
+    "index": 4,
+    "key": "path:4"
+   },
+   {
+    "index": 5,
+    "key": "path:5"
+   },
+   {
+    "index": 6,
+    "key": "path:6"
+   },
+   {
+    "index": 7,
+    "key": "path:7"
+   },
+   {
+    "index": 8,
+    "key": "path:8"
+   },
+   {
+    "index": 9,
+    "key": "path:9"
+   },
+   {
+    "index": 10,
+    "key": "path:10"
+   },
+   {
+    "index": 11,
+    "key": "path:11"
+   },
+   {
+    "index": 12,
+    "key": "path:12"
+   },
+   {
+    "index": 13,
+    "key": "path:13"
+   },
+   {
+    "index": 14,
+    "key": "path:14"
+   },
+   {
+    "index": 15,
+    "key": "path:15"
+   },
+   {
+    "index": 16,
+    "key": "pathvar:5"
+   },
+   {
+    "index": 17,
+    "key": "pathvar:3"
+   },
+   {
+    "index": 18,
+    "key": "pathvar:9"
+   },
+   {
+    "index": 19,
+    "key": "pathvar:7"
+   },
+   {
+    "index": 20,
+    "key": "pathvar:13"
+   },
+   {
+    "index": 21,
+    "key": "pathvar:7b"
+   },
+   {
+    "index": 22,
+    "key": "pathvar:7c"
+   },
+   {
+    "index": 23,
+    "key": "roadfill"
+   }
+  ],
+  "tile": 16
+ },
+ "path_sand": {
+  "bin": "tiles_path_sand.bin",
+  "entries": [
+   {
+    "index": 0,
+    "key": "path:0"
+   },
+   {
+    "index": 1,
+    "key": "path:1"
+   },
+   {
+    "index": 2,
+    "key": "path:2"
+   },
+   {
+    "index": 3,
+    "key": "path:3"
+   },
+   {
+    "index": 4,
+    "key": "path:4"
+   },
+   {
+    "index": 5,
+    "key": "path:5"
+   },
+   {
+    "index": 6,
+    "key": "path:6"
+   },
+   {
+    "index": 7,
+    "key": "path:7"
+   },
+   {
+    "index": 8,
+    "key": "path:8"
+   },
+   {
+    "index": 9,
+    "key": "path:9"
+   },
+   {
+    "index": 10,
+    "key": "path:10"
+   },
+   {
+    "index": 11,
+    "key": "path:11"
+   },
+   {
+    "index": 12,
+    "key": "path:12"
+   },
+   {
+    "index": 13,
+    "key": "path:13"
+   },
+   {
+    "index": 14,
+    "key": "path:14"
+   },
+   {
+    "index": 15,
+    "key": "path:15"
+   },
+   {
+    "index": 16,
+    "key": "pathvar:0"
+   },
+   {
+    "index": 17,
+    "key": "pathvar:4"
+   },
+   {
+    "index": 18,
+    "key": "pathvar:2"
+   },
+   {
+    "index": 19,
+    "key": "pathvar:8"
+   },
+   {
+    "index": 20,
+    "key": "pathvar:6"
+   },
+   {
+    "index": 21,
+    "key": "pathvar:7"
+   },
+   {
+    "index": 22,
+    "key": "roadfill"
+   }
+  ],
+  "tile": 16
+ },
+ "proc": {
+  "bin": "tiles_proc.bin",
+  "entries": [
+   {
+    "index": 0,
+    "key": "roadfill_gravel"
+   },
+   {
+    "index": 1,
+    "key": "roadfill_bitumen"
+   },
+   {
+    "index": 2,
+    "key": "roadfill_sand"
+   },
+   {
+    "index": 3,
+    "key": "dither_gravel"
+   },
+   {
+    "index": 4,
+    "key": "dither_bitumen"
+   },
+   {
+    "index": 5,
+    "key": "dither_sand"
+   }
+  ],
+  "tile": 16
+ },
+ "wang_grass_gravel": {
+  "bin": "tiles_wang_grass_gravel.bin",
+  "entries": [
+   {
+    "index": 0,
+    "key": "wang:1,1,0,1"
+   },
+   {
+    "index": 1,
+    "key": "wang:1,0,1,0"
+   },
+   {
+    "index": 2,
+    "key": "wang:0,1,0,0"
+   },
+   {
+    "index": 3,
+    "key": "wang:1,1,0,0"
+   },
+   {
+    "index": 4,
+    "key": "wang:0,1,1,0"
+   },
+   {
+    "index": 5,
+    "key": "wang:1,0,0,0"
+   },
+   {
+    "index": 6,
+    "key": "wang:0,0,0,0"
+   },
+   {
+    "index": 7,
+    "key": "wang:0,0,0,1"
+   },
+   {
+    "index": 8,
+    "key": "wang:1,0,1,1"
+   },
+   {
+    "index": 9,
+    "key": "wang:0,0,1,1"
+   },
+   {
+    "index": 10,
+    "key": "wang:0,0,1,0"
+   },
+   {
+    "index": 11,
+    "key": "wang:0,1,0,1"
+   },
+   {
+    "index": 12,
+    "key": "wang:1,1,1,1"
+   },
+   {
+    "index": 13,
+    "key": "wang:1,1,1,0"
+   },
+   {
+    "index": 14,
+    "key": "wang:1,0,0,1"
+   },
+   {
+    "index": 15,
+    "key": "wang:0,1,1,1"
+   }
+  ],
+  "tile": 16
+ },
+ "wang_sand_grass": {
+  "bin": "tiles_wang_sand_grass.bin",
+  "entries": [
+   {
+    "index": 0,
+    "key": "wang:1,1,0,1"
+   },
+   {
+    "index": 1,
+    "key": "wang:1,0,1,0"
+   },
+   {
+    "index": 2,
+    "key": "wang:0,1,0,0"
+   },
+   {
+    "index": 3,
+    "key": "wang:1,1,0,0"
+   },
+   {
+    "index": 4,
+    "key": "wang:0,1,1,0"
+   },
+   {
+    "index": 5,
+    "key": "wang:1,0,0,0"
+   },
+   {
+    "index": 6,
+    "key": "wang:0,0,0,0"
+   },
+   {
+    "index": 7,
+    "key": "wang:0,0,0,1"
+   },
+   {
+    "index": 8,
+    "key": "wang:1,0,1,1"
+   },
+   {
+    "index": 9,
+    "key": "wang:0,0,1,1"
+   },
+   {
+    "index": 10,
+    "key": "wang:0,0,1,0"
+   },
+   {
+    "index": 11,
+    "key": "wang:0,1,0,1"
+   },
+   {
+    "index": 12,
+    "key": "wang:1,1,1,1"
+   },
+   {
+    "index": 13,
+    "key": "wang:1,1,1,0"
+   },
+   {
+    "index": 14,
+    "key": "wang:1,0,0,1"
+   },
+   {
+    "index": 15,
+    "key": "wang:0,1,1,1"
+   }
+  ],
+  "tile": 16
+ },
+ "wang_water_sand": {
+  "bin": "tiles_wang_water_sand.bin",
+  "entries": [
+   {
+    "index": 0,
+    "key": "wang:1,1,0,1"
+   },
+   {
+    "index": 1,
+    "key": "wang:1,0,1,0"
+   },
+   {
+    "index": 2,
+    "key": "wang:0,1,0,0"
+   },
+   {
+    "index": 3,
+    "key": "wang:1,1,0,0"
+   },
+   {
+    "index": 4,
+    "key": "wang:0,1,1,0"
+   },
+   {
+    "index": 5,
+    "key": "wang:1,0,0,0"
+   },
+   {
+    "index": 6,
+    "key": "wang:0,0,0,0"
+   },
+   {
+    "index": 7,
+    "key": "wang:0,0,0,1"
+   },
+   {
+    "index": 8,
+    "key": "wang:1,0,1,1"
+   },
+   {
+    "index": 9,
+    "key": "wang:0,0,1,1"
+   },
+   {
+    "index": 10,
+    "key": "wang:0,0,1,0"
+   },
+   {
+    "index": 11,
+    "key": "wang:0,1,0,1"
+   },
+   {
+    "index": 12,
+    "key": "wang:1,1,1,1"
+   },
+   {
+    "index": 13,
+    "key": "wang:1,1,1,0"
+   },
+   {
+    "index": 14,
+    "key": "wang:1,0,0,1"
+   },
+   {
+    "index": 15,
+    "key": "wang:0,1,1,1"
+   }
+  ],
+  "tile": 16
+ }
+}
