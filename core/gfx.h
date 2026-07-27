@@ -39,4 +39,6 @@ void gfx_fill(gfx_t *g, uint16_t *fb, int fb_h,
               int x, int y, int w, int h, uint8_t pal);
 void gfx_text(gfx_t *g, uint16_t *fb, int fb_h,
               int x, int y, const char *s, uint8_t pal); // 6x8, palette colour
+void gfx_text_scale(gfx_t *g, uint16_t *fb, int fb_h,
+                    int x, int y, const char *s, uint8_t pal, int scale);
 int gfx_text_width(const char *s);

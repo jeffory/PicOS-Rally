@@ -516,3 +516,40 @@ HUD panel art as screen furniture, ruts (directional overlay along the
 racing line, not baked tiles), grass fill variants if uniformity bothers,
 sand-road/terrain contrast check with user, gravel hue check (reads salmon
 on LCD?).
+
+## 7. M5 — feel (2026-07-27)
+
+**Audio (Core 1, Doom pattern).** `core/audio_synth.c`: pure mixer (no PicOS)
+— engine = 2 detuned saws + square sub through a 5-gear box (rpm from vx,
+gain from throttle), surface noise = LFSR + one-pole lowpass (gain × speed ×
+slip boost, per-surface gain/alpha), SPSC 4-deep one-shot queue (countdown
+beeps, GO, checkpoint blip, finish sting, water splash, penalty thud).
+App glue in main.c: shared input struct, worker pushes via `pushSamples`,
+events fired from race flow. Headless covers silence/audible/limiter/event
+retire/determinism.
+
+**The Core-1 audio pacing trap (measured).** Doom-style elapsed-time pacing
+UNDERPORDUCES on this firmware: the Core-1 callback fires ~1kHz bursty and
+`getTimeUs` quantizes coarsely, so elapsed-derived sample counts starve the
+4096-sample ring (~2.4% underrun, ring pinned near-empty). Proven with a
+fixed-quantum test tone (ring instantly full, underruns frozen). Fix:
+**floor the per-call push at 16 samples** (≥ cadence×rate), excess drops
+harmlessly on a full ring. After: underruns frozen through countdown,
+racing, and the full stage.
+
+**Particles + skids** (`core/effects.c`): 64-pool dust from the rear axle,
+rate = throttle×0.6 + slip×2.2, per-surface scale/palette, CLUT shade-step
+fade; 256-segment skid ring, laid per 0.4m of rear-axle travel when
+|slip_rear| > 0.10 and vx > 4. Visual only — sim determinism untouched.
+
+**Presentation.** `gfx_text_scale` (integer 1-6×): big countdown digits,
+"GO!" flash (45 frames), 2× speed readout, severity-coloured pacenote
+chevrons (amber 1-2, yellow 3-4, red 5-6/caution + text). Crest camera kick
+once per flagged line point >12m/s.
+
+**Measured after M5** (300-frame, AI racing): sim 0.45ms, render 12.0ms
+(+1.6ms over M4 = effects + scaled text), present 13.1ms — still inside the
+30fps budget. Audio: zero underruns post-prime, ring full.
+
+**Ear test owed**: synth quality (engine pitch vs speed, gravel noise, event
+balance) needs human ears — counters only prove the stream is fed.

@@ -90,18 +90,31 @@ int gfx_text_width(const char *s) {
 
 void gfx_text(gfx_t *g, uint16_t *fb, int fb_h,
               int x, int y, const char *s, uint8_t pal) {
+    gfx_text_scale(g, fb, fb_h, x, y, s, pal, 1);
+}
+
+void gfx_text_scale(gfx_t *g, uint16_t *fb, int fb_h,
+                    int x, int y, const char *s, uint8_t pal, int scale) {
     uint16_t c = g->clut[pal];
-    for (; *s; s++, x += 6) {
+    if (scale < 1) scale = 1;
+    if (scale > 6) scale = 6;
+    for (; *s; s++, x += 6 * scale) {
         if (*s < 0x20 || *s > 0x7E) continue;
         const uint8_t *glyph = s_font6x8[*s - 0x20];  // 6 column bytes, LSB=top
         for (int gx = 0; gx < 6; gx++) {
-            int xx = x + gx;
-            if (xx < 0 || xx >= GFX_FB_W) continue;
             uint8_t bits = glyph[gx];
             for (int gy = 0; gy < 8; gy++) {
-                int yy = y + gy;
-                if (yy < 0 || yy >= fb_h) continue;
-                if (bits & (1 << gy)) fb[yy * GFX_FB_W + xx] = c;
+                if (!(bits & (1 << gy))) continue;
+                // draw the scale×scale block, clipped
+                for (int dy = 0; dy < scale; dy++) {
+                    int yy = y + gy * scale + dy;
+                    if (yy < 0 || yy >= fb_h) continue;
+                    uint16_t *row = fb + yy * GFX_FB_W;
+                    for (int dx = 0; dx < scale; dx++) {
+                        int xx = x + gx * scale + dx;
+                        if (xx >= 0 && xx < GFX_FB_W) row[xx] = c;
+                    }
+                }
             }
         }
     }

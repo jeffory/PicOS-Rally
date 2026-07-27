@@ -21,6 +21,8 @@
 #include "../core/render_track.h"
 #include "../core/gfx.h"
 #include "../core/tiles_sections.h"
+#include "../core/audio_synth.h"
+#include "../core/effects.h"
 
 static const PicoCalcAPI *s_api;
 
@@ -54,6 +56,7 @@ typedef enum {
 typedef struct {
     race_state_t state;
     int countdown;              // frames left in countdown phase
+    int go_flash;               // frames left of the "GO!" overlay
     float stage_s;              // stage timer, seconds (sim-time, deterministic)
     float penalty_s;
     uint32_t best_total_ms;     // session best (0 = none; survives resets)
@@ -78,6 +81,8 @@ static uint8_t *s_blob;
 static ai_state_t s_ai;
 static int s_autopilot = 0;
 static surface_src_t s_tsrc;
+static synth_state_t s_synth;
+static fx_t s_fx;
 
 // M4 gfx state: CLUT + tile sections + sprite sheets, all in PSRAM.
 static gfx_t s_gfx;
@@ -227,6 +232,7 @@ static void race_reset_run(car_t *car, camera_t *cam) {
     sim_init(car, x, y, mx_atan2(dx, dy));
     camera_init(cam, car);
     ai_init(&s_ai, &s_track);
+    fx_init(&s_fx, 20260726u);
 }
 
 // Called once per 60 Hz sim step during RS_RACING with the car's line metrics.
@@ -244,6 +250,7 @@ static void race_step(race_t *r, car_t *car, float dt) {
         r->last_split_s = r->stage_s;
         r->last_split_idx = r->next_cp;
         r->next_cp++;
+        synth_event(&s_synth, SYN_EV_SPLIT);
     }
 
     // off-course: 3 s outside the polygon → 5 s penalty + respawn
@@ -257,6 +264,7 @@ static void race_step(race_t *r, car_t *car, float dt) {
             float sp = car->vx * 0.4f;
             sim_init(car, x, y, mx_atan2(dx, dy));
             car->vx = sp;
+            synth_event(&s_synth, SYN_EV_THUD);
             s_api->sys->log("RALLY: off-course +5s (respawn at %.0fm)", idx * 2.0f);
         }
     } else {
@@ -284,7 +292,57 @@ static void race_step(race_t *r, car_t *car, float dt) {
         uint32_t total = (uint32_t)((r->stage_s + r->penalty_s) * 1000.0f);
         if (!r->best_total_ms || total < r->best_total_ms)
             r->best_total_ms = total;
+        synth_event(&s_synth, SYN_EV_FINISH);
     }
+}
+
+// ── M4 render helpers ───────────────────────────────────────────────────────
+// ── M5 audio: shared input + Core 1 mixer worker (Doom pattern) ────────────
+static volatile synth_input_t s_ain;
+static uint32_t s_audio_prev_us;
+static int16_t s_mix_buf[256 * 2];
+
+static void audio_worker(void) {
+    uint32_t now = (uint32_t)s_api->sys->getTimeUs();
+    if (s_audio_prev_us == 0) { s_audio_prev_us = now; return; }
+    uint32_t elapsed = now - s_audio_prev_us;
+    s_audio_prev_us = now;
+    int samples = (int)((uint64_t)elapsed * SYNTH_RATE / 1000000u);
+    // Core-1 cadence is ~1kHz bursty and getTimeUs quantizes coarsely
+    // (measured 2026-07-27: elapsed-driven pacing underproduces → stream
+    // underruns). Floor the push at a per-call quantum that keeps the ring
+    // full at typical cadence; excess drops harmlessly on a full ring.
+    if (samples < 16) samples = 16;
+    while (samples > 0) {
+        int n = samples > 256 ? 256 : samples;
+        synth_mix(&s_synth, (const synth_input_t *)&s_ain, s_mix_buf, n);
+        s_api->audio->pushSamples(s_mix_buf, n);
+        samples -= n;
+    }
+}
+
+static void audio_init(void) {
+    synth_init(&s_synth);
+    memset((void *)&s_ain, 0, sizeof(s_ain));
+    s_audio_prev_us = 0;
+    s_api->audio->setVolume(80);
+    s_api->audio->startStream(SYNTH_RATE);
+    s_api->sys->setAudioCallback(audio_worker);
+}
+
+static void audio_shutdown(void) {
+    s_api->sys->setAudioCallback(NULL);
+    s_api->audio->stopStream();
+}
+
+// per-frame: publish car state to the mixer
+static void audio_feed(const car_t *car, float raw_throttle, bool hb, bool engine_on) {
+    s_ain.vx = car->vx;
+    s_ain.throttle = raw_throttle;
+    s_ain.slip_rear = car->slip_rear;
+    s_ain.surface = car->surface;
+    s_ain.handbrake = hb;
+    s_ain.engine_on = engine_on;
 }
 
 // ── M4 render helpers ───────────────────────────────────────────────────────
@@ -313,19 +371,35 @@ static void render_hud(uint16_t *fb, const race_t *r, const car_t *car) {
     gfx_text(&s_gfx, fb, 320, 6, VP_H + 8, line, PAL_HUD_TEXT);
     snprintf(line, sizeof(line), "pen %lus", (unsigned long)r->penalty_s);
     gfx_text(&s_gfx, fb, 320, 6, VP_H + 20, line, PAL_HUD_AMBER_DIM);
-    // centre: pacenote / split
+    // centre: pacenote panel (severity-coloured chevron + text) / split
     if (r->note) {
-        gfx_text(&s_gfx, fb, 320, 110, VP_H + 8, r->note->text, PAL_HUD_AMBER);
-    }
-    if (r->last_split_idx >= 0) {
+        const char *txt = r->note->text;
+        int sev = 0, caution = 0;
+        char arrow = '>';
+        if (txt[0] == 'l') arrow = '<';
+        else if (txt[0] == 'c') caution = 1;
+        for (const char *p = txt; *p; p++)
+            if (*p >= '1' && *p <= '6') { sev = *p - '0'; break; }
+        uint8_t col = PAL_HUD_AMBER;
+        if (sev >= 3 && sev <= 4) col = PAL_SIGN_YELLOW;
+        else if (sev >= 5 || caution) col = PAL_SIGN_RED;
+        char glyph[8];
+        int gi = 0;
+        if (caution) glyph[gi++] = '!';
+        else glyph[gi++] = arrow;
+        if (sev) glyph[gi++] = (char)('0' + sev);
+        glyph[gi] = 0;
+        gfx_text_scale(&s_gfx, fb, 320, 106, VP_H + 6, glyph, col, 2);
+        gfx_text(&s_gfx, fb, 320, 106 + 6 * gi * 2 + 6, VP_H + 10, txt, PAL_HUD_TEXT);
+    } else if (r->last_split_idx >= 0) {
         snprintf(line, sizeof(line), "CP %d/%d", r->next_cp, s_track.num_cps);
         gfx_text(&s_gfx, fb, 320, 110, VP_H + 20, line, PAL_HUD_AMBER_DIM);
     }
     // right: speed + distance
     snprintf(line, sizeof(line), "%ld", (long)(car->vx * 3.6f));
-    gfx_text(&s_gfx, fb, 320, 320 - 6 - gfx_text_width(line), VP_H + 8,
-             line, PAL_HUD_TEXT);
-    gfx_text(&s_gfx, fb, 320, 320 - 6 - 30, VP_H + 20, "km/h", PAL_HUD_AMBER_DIM);
+    gfx_text_scale(&s_gfx, fb, 320, 320 - 6 - gfx_text_width(line) * 2, VP_H + 6,
+                   line, PAL_HUD_TEXT, 2);
+    gfx_text(&s_gfx, fb, 320, 320 - 6 - 30, VP_H + 24, "km/h", PAL_HUD_AMBER_DIM);
     snprintf(line, sizeof(line), "%ldm", (long)r->car_dist);
     gfx_text(&s_gfx, fb, 320, 6, VP_H + 34, line, PAL_HUD_AMBER_DIM);
 }
@@ -372,6 +446,12 @@ void picos_main(const PicoCalcAPI *api,
     uint32_t s_frames = 0;
     uint32_t acc_sim = 0, acc_render = 0, acc_present = 0;
     char line[96];
+    float last_thr = 0.0f;
+    int last_hb = 0;
+    int prev_surface = SURF_GRAVEL;
+    int last_crest_idx = -1;
+
+    audio_init();
 
     api->sys->log("RALLY: M3 start (%s)", s_track.num_points > 0 ? "stage ok" : "no stage");
 
@@ -429,11 +509,27 @@ void picos_main(const PicoCalcAPI *api,
                 // brake-hold triggered reverse creep — the car rolled off the
                 // line during 3-2-1 and took a false penalty at GO.)
                 car.vx = 0.0f; car.vy = 0.0f; car.yaw_rate = 0.0f;
-                if (--s_race.countdown <= 0) s_race.state = RS_RACING;
+                int prev = s_race.countdown;
+                if (--s_race.countdown <= 0) {
+                    s_race.state = RS_RACING;
+                    s_race.go_flash = 45;
+                    synth_event(&s_synth, SYN_EV_GO);
+                } else if (prev / 60 != s_race.countdown / 60) {
+                    synth_event(&s_synth, SYN_EV_BEEP);
+                }
+                last_thr = in.throttle;
+                last_hb = in.handbrake;
             } else {
                 uint64_t s0 = api->sys->getTimeUs();
                 sim_step(&car, &in, &tun, &s_tsrc);
                 acc_sim += (uint32_t)(api->sys->getTimeUs() - s0);
+                last_thr = car.throttle;
+                last_hb = in.handbrake;
+                fx_step(&s_fx, &car);
+                if (car.surface == SURF_WATER && prev_surface != SURF_WATER &&
+                        car.vx > 3.0f)
+                    synth_event(&s_synth, SYN_EV_SPLASH);
+                prev_surface = car.surface;
                 if (s_race.state == RS_RACING)
                     race_step(&s_race, &car, SIM_DT);
             }
@@ -442,6 +538,17 @@ void picos_main(const PicoCalcAPI *api,
         }
         if (steps == 4) sim_acc_us = 0;
         camera_update(&cam, &car, SIM_DT);
+        audio_feed(&car, last_thr, last_hb != 0, s_race.state != RS_INTRO);
+
+        // crest kick: once per flagged line point, only with real speed
+        if (s_race.state == RS_RACING) {
+            int li = (int)(s_race.car_dist / 2.0f);
+            if (li != last_crest_idx && li >= 0 && li < s_track.num_points) {
+                last_crest_idx = li;
+                if ((s_track.points[li].flags & 2) && car.vx > 12.0f)
+                    camera_kick(&cam, 0.0f, -2.5f);
+            }
+        }
 
         // ── Render ──────────────────────────────────────────────────────────
         uint64_t r0 = api->sys->getTimeUs();
@@ -465,12 +572,18 @@ void picos_main(const PicoCalcAPI *api,
             render_track_ground_gfx(&s_gfx, fb.fb, &cam, &s_track, VP_H);
             render_track_props_gfx(&s_gfx, fb.fb, &cam, &s_track, VP_H,
                                    s_props, PROP_SPRITE);
+            fx_render_skids(&s_fx, &s_gfx, fb.fb, &cam, VP_H);
+            fx_render_particles(&s_fx, &s_gfx, fb.fb, &cam, VP_H);
             render_car_sprite(fb.fb, &cam, &car);
 
             if (s_race.state == RS_COUNTDOWN) {
                 int n = (s_race.countdown / 60) + 1;
                 snprintf(line, sizeof(line), "%d", n > 3 ? 3 : n);
-                gfx_text(&s_gfx, fb.fb, VP_H, 156, 110, line, PAL_HUD_AMBER);
+                gfx_text_scale(&s_gfx, fb.fb, VP_H, 142, 96, line, PAL_HUD_AMBER, 6);
+            }
+            if (s_race.state == RS_RACING && s_race.go_flash > 0) {
+                gfx_text_scale(&s_gfx, fb.fb, VP_H, 124, 96, "GO!", PAL_SIGN_YELLOW, 6);
+                s_race.go_flash--;
             }
             if (s_race.state == RS_FINISH) {
                 gfx_fill(&s_gfx, fb.fb, VP_H, 40, 60, 240, 120, PAL_HUD_PANEL);
@@ -532,6 +645,7 @@ void picos_main(const PicoCalcAPI *api,
     }
 
     api->sys->log("RALLY: exit");
+    audio_shutdown();
     api->psram->qmiFree(s_blob);
     api->psram->qmiFree(s_clut);
     for (int i = 0; i < TILE_SEC_COUNT; i++) api->psram->qmiFree(s_tile_secs[i]);

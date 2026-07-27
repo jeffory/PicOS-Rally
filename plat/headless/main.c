@@ -17,6 +17,8 @@
 #include "../../core/gfx.h"
 #include "../../core/render_track.h"
 #include "../../core/tiles_sections.h"
+#include "../../core/audio_synth.h"
+#include "../../core/effects.h"
 
 static int s_checks = 0, s_failures = 0;
 
@@ -416,6 +418,95 @@ int main(int argc, char **argv) {
         }
         free(tex);
         free(fbmem);
+    }
+
+    // ── 11. M5: audio synth ────────────────────────────────────────────────
+    {
+        synth_state_t st;
+        synth_init(&st);
+        synth_input_t in = { 0 };
+        int16_t buf[512 * 2];
+        // idle engine-off: near silence
+        synth_mix(&st, &in, buf, 512);
+        int32_t peak = 0;
+        for (int i = 0; i < 512 * 2; i++)
+            if (buf[i] > peak) peak = buf[i]; else if (-buf[i] > peak) peak = -buf[i];
+        CHECK("synth silent when engine off", peak < 2000);
+        // racing: engine + gravel noise audible
+        in.engine_on = true;
+        in.vx = 18.0f;
+        in.throttle = 0.9f;
+        in.surface = SURF_GRAVEL;
+        in.slip_rear = 0.2f;
+        synth_mix(&st, &in, buf, 512);
+        peak = 0;
+        int clip = 0;
+        for (int i = 0; i < 512 * 2; i++) {
+            int32_t v = buf[i] < 0 ? -buf[i] : buf[i];
+            if (v > peak) peak = v;
+            if (buf[i] == 32767 || buf[i] == -32768) clip++;
+        }
+        CHECK("synth audible when racing", peak > 4000);
+        CHECK("synth limiter holds", clip < 50);
+        // events produce an energy spike and retire
+        synth_event(&st, SYN_EV_GO);
+        synth_mix(&st, &in, buf, 512);
+        peak = 0;
+        for (int i = 0; i < 512 * 2; i++) {
+            int32_t v = buf[i] < 0 ? -buf[i] : buf[i];
+            if (v > peak) peak = v;
+        }
+        CHECK("one-shot event audible", peak > 6000);
+        // drain the GO shot (320ms = ~3528 samples)
+        for (int k = 0; k < 8; k++) synth_mix(&st, &in, buf, 512);
+        CHECK("one-shot retires", st.ev_type == 0);
+        // determinism: same inputs twice → same output
+        synth_state_t a, b;
+        synth_init(&a);
+        synth_init(&b);
+        synth_event(&a, SYN_EV_BEEP);
+        synth_event(&b, SYN_EV_BEEP);
+        int16_t ba[256 * 2], bb[256 * 2];
+        synth_mix(&a, &in, ba, 256);
+        synth_mix(&b, &in, bb, 256);
+        CHECK("synth deterministic", memcmp(ba, bb, sizeof(ba)) == 0);
+    }
+
+    // ── 12. M5: effects (dust + skids) ─────────────────────────────────────
+    {
+        fx_t fx;
+        fx_init(&fx, 12345u);
+        car_t car;
+        sim_init(&car, 0.0f, 0.0f, 0.0f);
+        car.vx = 15.0f;
+        car.throttle = 1.0f;
+        car.slip_rear = 0.3f;
+        car.surface = SURF_GRAVEL;
+        for (int i = 0; i < 120; i++) {
+            car.x += car.vx * SIM_DT;   // travel (skids are distance-triggered)
+            fx_step(&fx, &car);
+        }
+        int alive = 0;
+        for (int i = 0; i < FX_MAX_PARTICLES; i++)
+            if (fx.p[i].life) alive++;
+        CHECK("dust spawns under throttle+slip", alive > 0);
+        CHECK("dust pool bounded", alive <= FX_MAX_PARTICLES);
+        CHECK("skids lay under slip", fx.skid_head > 0);
+        // skids stop when grip returns
+        car.slip_rear = 0.0f;
+        int head_before = fx.skid_head;
+        for (int i = 0; i < 30; i++) {
+            car.x += car.vx * SIM_DT;
+            fx_step(&fx, &car);
+        }
+        CHECK("skids stop when grip returns", fx.skid_head == head_before);
+        // particles die out once the throttle lifts
+        car.throttle = 0.0f;
+        for (int i = 0; i < 600; i++) fx_step(&fx, &car);
+        alive = 0;
+        for (int i = 0; i < FX_MAX_PARTICLES; i++)
+            if (fx.p[i].life) alive++;
+        CHECK("dust decays", alive == 0);
     }
 
     printf("1..%d\n", s_checks);
