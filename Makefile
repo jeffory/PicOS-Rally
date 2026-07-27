@@ -12,14 +12,17 @@ LDFLAGS = -T ../../sdk/native/linker.ld \
           -nostartfiles -nodefaultlibs -lc -lm -lgcc
 
 SRCS    = app/main.c app/stubs.c \
-          core/mathx.c core/tuning.c core/sim.c core/camera.c core/render.c
+          core/mathx.c core/tuning.c core/sim.c core/camera.c core/render.c \
+          core/surface.c
 TARGET  = main.elf
 
 .PHONY: all clean
 
 all: $(TARGET)
 
-$(TARGET): $(SRCS) ../../sdk/native/linker.ld ../../sdk/native/os.h ../../sdk/native/app_abi.h
+HDRS    = $(wildcard core/*.h) app/../core/font6x8.h
+
+$(TARGET): $(SRCS) $(HDRS) ../../sdk/native/linker.ld ../../sdk/native/os.h ../../sdk/native/app_abi.h
 	$(CC) $(CFLAGS) $(SRCS) $(LDFLAGS) -o $@
 	arm-none-eabi-strip $@
 	arm-none-eabi-size $@

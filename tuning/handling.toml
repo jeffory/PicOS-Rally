@@ -15,12 +15,19 @@ rolling_res = 12.8        # N·s/m
 ca_front = 60000.0        # N/rad
 ca_rear = 65000.0         # stiffer rear = mild understeer (forgiving default)
 
-# --- digital input: these four ARE the handling on a keyboard ---
-steer.ramp_up_s = 0.180   # 0 → full lock
-steer.ramp_down_s = 0.110 # full → centre
+# --- digital input: these ARE the handling on a keyboard ---
+# M2.3 tune (user drive 1): sharper ramps, more lock at speed, knee curve.
+steer.ramp_up_s = 0.100   # 0 → full lock (was 0.180 — felt lazy)
+steer.ramp_down_s = 0.070 # full → centre (was 0.110)
 steer.max_low_deg = 35.0  # lock at standstill
-steer.max_high_deg = 12.0 # lock at max speed
-throttle.ramp_up_s = 0.090
+steer.max_high_deg = 14.0 # lock at max speed (was 12 — not enough lock fast)
+steer.curve_knee = 0.60   # high lock reached at 60% of max speed
+throttle.ramp_up_s = 0.060
+
+# --- handbrake (M2.3: was "works but very subtle") ---
+hb.mu_cut = 0.45      # rear mu multiplier (was 0.55)
+hb.ca_cut = 0.40      # rear cornering stiffness multiplier
+hb.yaw_kick = 1.5     # rad/s yaw bias while steering + handbrake
 
 # --- surface (F5 cycles in the grey box) ---
 mu = 0.72                 # gravel

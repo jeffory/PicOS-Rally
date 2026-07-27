@@ -47,8 +47,11 @@ typedef enum {
 float sim_surface_mu(int surface);
 
 void sim_init(car_t *car, float x, float y, float heading);
-// One 60 Hz step. surface: SURF_* (M1: uniform ground; M2: per-wheel lookup).
-void sim_step(car_t *car, const sim_input_t *in, const tuning_t *tun, int surface);
+// One 60 Hz step. smap: surface map (per-axle lookup at wheel positions).
+// May be NULL → uniform SURF_GRAVEL.
+typedef struct surface_map surface_map_t;
+void sim_step(car_t *car, const sim_input_t *in, const tuning_t *tun,
+              const surface_map_t *smap);
 
 // Determinism hash for the M3 replay test (FNV-1a over the POD state).
 uint32_t sim_state_hash(const car_t *car);

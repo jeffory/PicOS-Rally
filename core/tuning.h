@@ -23,7 +23,11 @@ typedef struct {
     float steer_ramp_down_s;  // full→centre
     float steer_max_low_deg;  // lock at zero speed
     float steer_max_high_deg; // lock at max speed
+    float steer_curve_knee;   // fraction of max speed where high lock is reached
     float throttle_ramp_up_s;
+    float hb_yaw_kick;        // rad/s yaw bias while handbrake + steering
+    float hb_mu_cut;          // rear mu multiplier under handbrake
+    float hb_ca_cut;          // rear cornering-stiffness multiplier under handbrake
     // --- surfaces ---
     float mu;             // active friction coefficient (F5 cycles in grey box)
     // --- arcade/sim dial (§9) ---

@@ -358,7 +358,43 @@ candidate one-line doc fix upstream (separate commit, later).
   tools/ at M2) bypasses MCP port coordination: zip→putb64→unzip push,
   launch/keys/screenshot64. Screenshot64 ≈ 25 s at 115200.
 
-**Feel so far (user, hardware): "drives okay, turning just doesn't seem very
-responsive."** → M2: tune ramp times and maxSteer curve first; if the 20 Hz
-poll cap is the binding constraint, propose a PicOS poll-rate change with data.
+## 4. M2 — physics (2026-07-27, user-approved: "all good — close M2")
+
+**What shipped:** per-axle surfaces (procedural test oval: gravel ring /
+bitumen sector / creek / sand trap / grass), traction limit, input ramps,
+assist dial, reloadable tuning, control remap. Headless suite 22/22 green
+(tyre clamp, load transfer, surface lookup, ramps, assist, handbrake,
+determinism hash, render smoke).
+
+**Tuning locked** (handling.toml + tuning.c defaults):
+steer.ramp_up 0.100 / ramp_down 0.070 (from 0.180/0.110 — was "lazy"),
+steer.max_low 35° / max_high 14° with curve_knee 0.60 (lock now survives to
+60% of max speed; was linear 35→12 and felt empty at speed),
+throttle.ramp 0.060. Handbrake: mu_cut 0.45, ca_cut 0.40, yaw_kick 1.5 rad/s
+(was "works but very subtle" — the yaw kick is the arcade pivot).
+assist 0.60 unchanged.
+
+**The big physics lesson — traction limit:** engine force is capped by
+mu × rear-axle load (`engine = min(engine, mu_r * fz_r)`). Linear rolling
+resistance alone can never bog a car at low speed (960 N vs 3857 N engine);
+the traction cap makes gravel launches spin and water/sand genuinely bog.
+That single line did more for "surfaces read" than all RR tuning.
+
+**The alignment bug (why surfaces were "too subtle" for two drives):** the
+painted ground texture centres the world origin at the texture centre, but
+`render_ortho_ground` sampled without the half-texture offset — the visible
+ring was drawn 64 m from the physics ring. The user's "slipR 0 GRASS" was
+CORRECT: they drove painted gravel while physics read grass. Blit + mode7
+cam now both add the centre offset. **If physics and visuals ever disagree
+about surfaces again, suspect a sampling offset before touching the model.**
+
+**Controls (M2.3 remap, user-approved):** F5 throttle, F4 brake/reverse,
+arrows steer, BACKSPACE handbrake. F1 projection, F2 pace, F3 autopilot,
+F9 debug overlay. Chars: m/p/d/r/h/-/=/[/]/0-2 (+ ESC exit).
+
+**Left for M3+:** assist dial still at 0.60 default (user had no complaint —
+revisit if the stage feels too caught); per-wheel (not per-axle) surfaces
+when the baked grid lands; the 20 Hz input poll — not raised again, ramps
+tuned around it successfully.
+
 

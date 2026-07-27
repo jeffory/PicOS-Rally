@@ -6,7 +6,7 @@ Usage: rally_hw.py [push|launch|keys|shot|log]"""
 import base64, io, os, sys, time, zipfile
 
 PORT = "/dev/ttyACM0"
-APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+APP_DIR = "/home/keith/Projects/picos-rally/apps/rally"
 REMOTE = "/apps/rally"
 
 import serial  # pyserial
@@ -172,6 +172,11 @@ def main():
     if what == "launch":
         dev.cmd("launch rally", wait=1.5)
         print("\n".join(dev.drain(2.0)))
+    if what == "put":
+        local, remote = sys.argv[2], sys.argv[3]
+        with open(local, "rb") as fh:
+            dev.put_file(fh.read(), remote)
+        print(f"put {local} -> {remote}")
     if what == "shot":
         dev.screenshot(sys.argv[2] if len(sys.argv) > 2 else "/tmp/rally_hw.png")
     if what == "log":

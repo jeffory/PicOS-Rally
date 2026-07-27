@@ -15,11 +15,15 @@ void tuning_defaults(tuning_t *t) {
     t->rolling_res       = 12.8f;
     t->ca_front          = 60000.0f;
     t->ca_rear           = 65000.0f;
-    t->steer_ramp_up_s   = 0.180f;
-    t->steer_ramp_down_s = 0.110f;
+    t->steer_ramp_up_s   = 0.100f;   // M2.3: 0.180 felt lazy — sharpened
+    t->steer_ramp_down_s = 0.070f;   // M2.3: 0.110
     t->steer_max_low_deg  = 35.0f;
-    t->steer_max_high_deg = 12.0f;
-    t->throttle_ramp_up_s = 0.090f;
+    t->steer_max_high_deg = 14.0f;   // M2.3: 12 felt like not enough lock at speed
+    t->steer_curve_knee   = 0.60f;   // high lock reached at 60% of max speed
+    t->throttle_ramp_up_s = 0.060f;  // M2.3: 0.090
+    t->hb_yaw_kick        = 1.5f;
+    t->hb_mu_cut          = 0.45f;   // M2.3: 0.55 was too subtle
+    t->hb_ca_cut          = 0.40f;
     t->mu                = 0.72f;   // gravel — the stage surface
     t->assist            = 0.60f;
     t->assist_slip       = 0.22f;
@@ -46,7 +50,11 @@ static int apply_key(tuning_t *t, const char *key, int klen, float value) {
         {"steer.ramp_down_s", offsetof(tuning_t, steer_ramp_down_s)},
         {"steer.max_low_deg", offsetof(tuning_t, steer_max_low_deg)},
         {"steer.max_high_deg",offsetof(tuning_t, steer_max_high_deg)},
+        {"steer.curve_knee",  offsetof(tuning_t, steer_curve_knee)},
         {"throttle.ramp_up_s",offsetof(tuning_t, throttle_ramp_up_s)},
+        {"hb.yaw_kick",       offsetof(tuning_t, hb_yaw_kick)},
+        {"hb.mu_cut",         offsetof(tuning_t, hb_mu_cut)},
+        {"hb.ca_cut",         offsetof(tuning_t, hb_ca_cut)},
         {"mu",                offsetof(tuning_t, mu)},
         {"assist",            offsetof(tuning_t, assist)},
         {"assist.slip",       offsetof(tuning_t, assist_slip)},

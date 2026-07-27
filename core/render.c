@@ -60,13 +60,14 @@ void render_line(framebuf_t *f, int x0, int y0, int x1, int y1, uint16_t be) {
 }
 
 // Ground blit: world texel (wx, wy) = pixel at (cam*4 + screen - centre).
-// Texture wraps in both axes. Source rows are contiguous 16-px chunks, so we
-// copy runs; destination is contiguous across the whole row.
+// The texture is painted with the world origin at its centre (surface_paint_
+// texture), so the sampling offset includes the half-texture centre term —
+// without it the visual terrain and the physics surface map are 64 m apart.
 void render_ortho_ground(framebuf_t *f, const camera_t *cam,
                          const uint16_t *tex, int tw, int th) {
     const int cx = f->w / 2, cy = f->h / 2;
-    const int base_wx = (int)(cam->x * RENDER_PX_PER_M) - cx;
-    const int base_wy = (int)(cam->y * RENDER_PX_PER_M) - cy;
+    const int base_wx = (int)(cam->x * RENDER_PX_PER_M) - cx + tw / 2;
+    const int base_wy = (int)(cam->y * RENDER_PX_PER_M) - cy + th / 2;
     const uint32_t wmask = (uint32_t)tw - 1;   // caller guarantees pow2
     const uint32_t hmask = (uint32_t)th - 1;
 
