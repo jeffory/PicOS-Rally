@@ -293,13 +293,72 @@ input poll-rate adaptivity, `flushRegion_nocopy` exposure, crypto in sim.
 
 ## 2. Open questions carried to M1
 
-1. Mode 7 vs orthographic — M1 spike with measured numbers, decide together.
+1. ~~Mode 7 vs orthographic~~ **DECIDED 2026-07-27: Option A (ortho)** — see §3.
 2. ~~Does the STM32 scanner pass 3-key chords?~~ **ANSWERED: yes for
    arrows+SHIFT; 4th key ghosts. Controls must fit in 3 simultaneous.**
 3. ~~Is 20 Hz input acceptable?~~ Deferred to M2 feel test with the user driving;
    the 180 ms steer ramp + assist is designed around it. If it feels bad, the fix
    is a PicOS-level poll-rate change, proposed then with data.
+   **M1 user drive note: "turning just doesn't seem very responsive"** — first
+   tuning target for M2 (ramp times, maxSteer curve, maybe poll-rate proposal).
 4. 300 MHz for Rally? Measured cost: full-frame cap drops 57→43 fps. Decide after
-   M1/M2 CPU benchmarks — default is 200 MHz.
+   M2 CPU benchmarks — default is 200 MHz. (M1 says NOT needed: sim is 0.15 ms.)
 5. Suspend/resume: does PicOS background apps? (Believed no — launcher is modal.
    Confirm; if so, ask user whether in scope.)
+
+## 3. M1 — grey box + Mode 7 spike (2026-07-27, all hardware-measured)
+
+**App**: `apps/rally/` — core/ (mathx LUT trig, tuning parser, bicycle sim,
+camera, ortho blitter + 6×8 text on raw BE fb), app/ (PicOS glue, fixed 60 Hz
+sim, per-poll edge accumulation, F-key + char-key toggles, autopilot),
+plat/headless/ (host build, scripted drive + state hash). 42.5 KB text.
+
+**Measured @200 MHz** (bench logs every 300 frames):
+| Metric | Value | Budget | Verdict |
+|---|---|---|---|
+| sim step (bicycle+assist) | **~0.15 ms** (0.35 ms/frame @2 steps) | ≤2 ms/frame | 13× headroom — float32 fine, no fixed-point swap needed |
+| ortho render (320×320 full) | **11.7 ms** | ≤12 ms | at budget; drops to ~8.8 ms at 240-row viewport |
+| mode7 render (drawPlane) | 9.4 ms solid / 10.9–13.1 ms noise at speed | — | compute-bound ~20 cycles/px |
+| mode7 tex 64² cache-fit vs 256² | 8.9 vs 9.35 ms (~5%) | — | **texture residency a non-issue; PSRAM fine** |
+| present (flush call) | ~50 µs | — | non-blocking DMA confirmed; previous frame always done |
+| FPS ceiling derived | 57 full / 76 viewport | ≥30 | 30 fps comfortable, 60 plausible |
+
+**§4a decision: ORTHO (Option A), user-approved 2026-07-27.** Mode 7's streaking
+(nearest-sample texel stretch) hits exactly the road-read zone at speed at every
+parameter combo tried (cam_z 24–64, scale 4–8, horizon 40–160). Fixes don't fit:
+bilinear = 2–4× cost, mipmaps = memory+complexity. Ortho pixels land 1:1, art
+does depth (PixelLab "high top-down" bakes sides/shadows). drawPlane stays in
+firmware unused by us; the mode7 harness code stays behind F1 for reference.
+
+**drawPlane texture format (verified via solid 0x07E0 probe): HOST-order
+RGB565** — same swap as every other firmware primitive. Undocumented in os.h;
+candidate one-line doc fix upstream (separate commit, later).
+
+**M1 bugs found & fixed (the interesting kind):**
+- **shouldExit() is consume-once — TWO call sites = the app can never exit.**
+  My pace-loop check swallowed the flag ~99% of frames. One call site only.
+- **idle_dim eats the first injected key after the screen dims** (wake-swallow
+  by design, clears injection state). Sim has no idle_dim → sim-only divergence.
+  Remote-driving workflow: send a neutral wake key first, or use chars.
+- **Char injection (`keypress x`) is far more reliable on hardware than button
+  injection** (different path: `s_injected_char` vs pending→publish which races
+  the wake-swallow). The app mirrors every F-key toggle on char keys
+  (m=projection, p=autopilot, d=debug, g=surface, t=tex, -/= cam_z, [/] scale,
+  h=horizon, 0-2 pace) — this is the primary remote-control channel.
+- **"exit" sent at the LAUNCHER appears to reboot the device mid-command**
+  (USB drops). Only send exit when status says an app is actually running.
+- Device spontaneously entered USB-MSC mode twice (host sees /dev/sda); serial
+  dies until ejected. `udisksctl power-off` clears it but the device then needs
+  a physical re-plug. Stale picos_mcp.py processes from old sessions hold the
+  port — check `fuser /dev/ttyACM*` before serial work.
+- Sim vs hardware: sim drawPlane tramp reads texture from emulated memory and
+  renders host-side (fast, correct colors); hardware render cost is the real
+  one. Sim input has no idle_dim swallow and no 20 Hz cap.
+- `tools/rally_hw.py`-style direct-serial driver (in /tmp, to be promoted into
+  tools/ at M2) bypasses MCP port coordination: zip→putb64→unzip push,
+  launch/keys/screenshot64. Screenshot64 ≈ 25 s at 115200.
+
+**Feel so far (user, hardware): "drives okay, turning just doesn't seem very
+responsive."** → M2: tune ramp times and maxSteer curve first; if the 20 Hz
+poll cap is the binding constraint, propose a PicOS poll-rate change with data.
+

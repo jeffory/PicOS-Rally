@@ -26,8 +26,11 @@ static const PicoCalcAPI *s_api;
 
 // ── Ground textures (procedural grey-box stand-in for art) ─────────────────
 // Host-order RGB565. 8 px checker + deterministic speckle + 64 px grid lines.
-static uint16_t *s_tex256;          // 128 KB, PSRAM (thrash case)
-static uint16_t *s_tex64;           // 8 KB, PSRAM but XIP-cache-resident
+static uint16_t *s_tex256;          // 128 KB, PSRAM (thrash case) — host order
+static uint16_t *s_tex64;           // 8 KB, PSRAM but XIP-cache-resident — host order
+// NOTE (verified on hardware 2026-07-27 with a solid 0x07E0 probe): drawPlane
+// takes HOST-order textures — its inner loop applies the same host→BE swap as
+// every other firmware primitive. There is no special texture format.
 
 #define RGB565H(r,g,b) ((uint16_t)(((r)&0x1F)<<11 | ((g)&0x3F)<<5 | ((b)&0x1F)))
 
@@ -76,9 +79,26 @@ static char s_char_accum;
 // (the busy-wait pace loop runs thousands of polls per frame).
 static void app_poll(void) {
     s_api->sys->poll();
-    s_pressed_accum |= s_api->input->getButtonsPressed();
+    uint32_t pressed = s_api->input->getButtonsPressed();
+    s_pressed_accum |= pressed;
     char c = s_api->input->getChar();
     if (c) s_char_accum = c;
+    // DIAG (M1 input debugging): log any held-state change or edge once.
+    static uint32_t s_last_held = 0, s_last_edge_seen = 0;
+    static char s_last_char_seen = 0;
+    uint32_t held = s_api->input->getButtons();
+    if (held != s_last_held) {
+        s_api->sys->log("RALLY held: %08lx", (unsigned long)held);
+        s_last_held = held;
+    }
+    if (pressed && pressed != s_last_edge_seen) {
+        s_api->sys->log("RALLY edge: %08lx", (unsigned long)pressed);
+        s_last_edge_seen = pressed;
+    }
+    if (c && c != s_last_char_seen) {
+        s_api->sys->log("RALLY char: %d", (int)c);
+        s_last_char_seen = c;
+    }
 }
 
 void picos_main(const PicoCalcAPI *api,
@@ -93,8 +113,7 @@ void picos_main(const PicoCalcAPI *api,
     s_tex256 = api->psram->qmiAlloc(TEX256 * TEX256 * 2);
     s_tex64  = api->psram->qmiAlloc(TEX64 * TEX64 * 2);
     if (!s_tex256 || !s_tex64) {
-        api->sys->log("RALLY: texture alloc failed (%p %p)",
-                      (void*)s_tex256, (void*)s_tex64);
+        api->sys->log("RALLY: texture alloc failed");
         return;
     }
     gen_texture(s_tex256, TEX256, 20260726u);
@@ -138,6 +157,9 @@ void picos_main(const PicoCalcAPI *api,
     char line[96];
 
     for (;;) {
+        // shouldExit() CONSUMES the flag — exactly one call site may check it,
+        // here at frame top. (A second check in the pace loop used to swallow
+        // the flag there 99% of the time and the app could never exit.)
         if (api->sys->shouldExit()) break;
 
         // ── Toggles read pressed_accum, filled by the sim-step polls below ──
@@ -168,6 +190,33 @@ void picos_main(const PicoCalcAPI *api,
         if (pressed & BTN_TAB) {
             s_m7_horizon = (s_m7_horizon == 40) ? 100 : (s_m7_horizon == 100) ? 160 : 40;
             api->sys->log("RALLY: horizon=%d", s_m7_horizon);
+        }
+        // Char-key mirrors of the F-key toggles — the serial injection path
+        // delivers chars far more reliably than button bits, so these are the
+        // primary remote-control channel on hardware.
+        switch (s_char_accum) {
+        case 'm': s_projection ^= 1;
+            api->sys->log("RALLY: projection -> %s", s_projection ? "mode7" : "ortho"); break;
+        case 'p': s_autopilot ^= 1;
+            api->sys->log("RALLY: autopilot %d", s_autopilot); break;
+        case 'd': s_debug ^= 1; break;
+        case 'g': s_surface = (s_surface + 1) % SURF_COUNT;
+            api->sys->log("RALLY: surface=%d", s_surface); break;
+        case 't': s_m7_texsel ^= 1;
+            api->sys->log("RALLY: tex=%d", s_m7_texsel); break;
+        case '-': s_m7_cam_z -= 4.0f; if (s_m7_cam_z < 4.0f) s_m7_cam_z = 4.0f;
+            api->sys->log("RALLY: cam_z=%d", (int)s_m7_cam_z); break;
+        case '=': s_m7_cam_z += 4.0f; if (s_m7_cam_z > 64.0f) s_m7_cam_z = 64.0f;
+            api->sys->log("RALLY: cam_z=%d", (int)s_m7_cam_z); break;
+        case '[': s_m7_scale -= 1.0f; if (s_m7_scale < 1.0f) s_m7_scale = 32.0f;
+            api->sys->log("RALLY: scale=%d", (int)s_m7_scale); break;
+        case ']': s_m7_scale += 1.0f; if (s_m7_scale > 32.0f) s_m7_scale = 1.0f;
+            api->sys->log("RALLY: scale=%d", (int)s_m7_scale); break;
+        case 'h': s_m7_horizon = (s_m7_horizon == 40) ? 100 : (s_m7_horizon == 100) ? 160 : 40;
+            api->sys->log("RALLY: horizon=%d", s_m7_horizon); break;
+        case '0': case '1': case '2': s_pace = s_char_accum - '0';
+            api->sys->log("RALLY: pace=%d", s_pace); break;
+        default: break;
         }
         if (s_char_accum == 27) break;
         s_char_accum = 0;
@@ -215,15 +264,20 @@ void picos_main(const PicoCalcAPI *api,
             render_ortho_ground(&fb, &cam, tex, tn, tn);
             render_car(&fb, &cam, &car, rgb565_be(28, 4, 4), rgb565_be(31, 63, 31));
         } else {
+            // drawPlane wants HOST-order textures (its inner loop byte-swaps
+            // into the big-endian back buffer, exactly like the other
+            // firmware primitives). The earlier BE assumption was wrong.
             const uint16_t *tex = s_m7_texsel ? s_tex64 : s_tex256;
             int tn = s_m7_texsel ? TEX64 : TEX256;
             // Clear the void above the horizon (drawPlane only fills below it).
-            d->fillRect(0, 0, 320, s_m7_horizon + 1, rgb565_be(1, 3, 4));
+            // API primitives take HOST-order colours (drawPlane textures are
+            // the odd ones out — they want big-endian; see gen_texture note).
+            d->fillRect(0, 0, 320, s_m7_horizon + 1, RGB565H(1, 3, 4));
             d->drawPlane(tex, tn, tn,
                          car.x * RENDER_PX_PER_M, car.y * RENDER_PX_PER_M,
                          s_m7_cam_z, car.heading, s_m7_horizon, s_m7_scale);
             // chase-cam car placeholder at bottom centre
-            uint16_t body = rgb565_be(28, 4, 4), edge = rgb565_be(31, 63, 31);
+            uint16_t body = RGB565H(28, 4, 4), edge = RGB565H(31, 63, 31);
             d->fillRect(160 - 6, 250 - 9, 12, 18, body);
             d->drawRect(160 - 6, 250 - 9, 12, 18, edge);
         }
@@ -233,13 +287,14 @@ void picos_main(const PicoCalcAPI *api,
         // writes the same buffer firmware-side). Overlay text follows the mode.
         if (s_debug) {
             uint32_t fr = s_frames ? s_frames : 1;
-            uint16_t fg = rgb565_be(31, 63, 31);
+            uint16_t fg = rgb565_be(31, 63, 31);       // direct path: big-endian
+            uint16_t fg_h = RGB565H(31, 63, 31);       // API path: host order
             snprintf(line, sizeof(line), "sim %lu rnd %lu dma %lu",
                      (unsigned long)(s_acc_sim_us / fr),
                      (unsigned long)(s_acc_render_us / fr),
                      (unsigned long)(s_acc_present_us / fr));
             if (s_projection == 0) render_text(&fb, 4, 4, line, fg, 0);
-            else d->drawText(4, 4, line, fg, 0);
+            else d->drawText(4, 4, line, fg_h, 0);
             snprintf(line, sizeof(line), "v %ldkm/h slipR %ld mu %ld ast %ld %s",
                      (long)(car.vx * 3.6f),
                      (long)(car.slip_rear * 100.0f),
@@ -247,12 +302,12 @@ void picos_main(const PicoCalcAPI *api,
                      (long)(tun.assist * 100.0f),
                      s_projection ? "M7" : "ORT");
             if (s_projection == 0) render_text(&fb, 4, 16, line, fg, 0);
-            else d->drawText(4, 16, line, fg, 0);
+            else d->drawText(4, 16, line, fg_h, 0);
             if (s_projection) {
                 snprintf(line, sizeof(line), "cz %ld sc %ld hz %d tx %d",
                          (long)s_m7_cam_z, (long)s_m7_scale,
                          s_m7_horizon, s_m7_texsel);
-                d->drawText(4, 28, line, fg, 0);
+                d->drawText(4, 28, line, fg_h, 0);
             }
         }
         s_acc_render_us += (uint32_t)(api->sys->getTimeUs() - r0);
@@ -284,7 +339,6 @@ void picos_main(const PicoCalcAPI *api,
             uint64_t start = api->sys->getTimeUs();
             while (api->sys->getTimeUs() - start < budget) {
                 app_poll();
-                if (api->sys->shouldExit()) break;
             }
         }
     }

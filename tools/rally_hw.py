@@ -1,0 +1,182 @@
+#!/usr/bin/env python3
+"""Standalone PicOS hardware driver for the rally M1 spike.
+Does the full deploy sequence over /dev/ttyACM0 without the MCP server:
+  exit app -> zip+push -> relaunch -> keypresses -> tail logs -> screenshot
+Usage: rally_hw.py [push|launch|keys|shot|log]"""
+import base64, io, os, sys, time, zipfile
+
+PORT = "/dev/ttyACM0"
+APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+REMOTE = "/apps/rally"
+
+import serial  # pyserial
+
+
+def detect_port():
+    for p in ("/dev/ttyACM0", "/dev/ttyACM1", "/dev/ttyACM2"):
+        if os.path.exists(p):
+            return p
+    raise RuntimeError("no ttyACM device found")
+
+
+def fnv1a(data: bytes) -> int:
+    h = 2166136261
+    for b in data:
+        h ^= b
+        h = (h * 16777619) & 0xFFFFFFFF
+    return h
+
+
+class Dev:
+    def __init__(self, port=None):
+        self.ser = serial.Serial(port or detect_port(), 115200, timeout=0.2)
+        time.sleep(0.3)
+
+    def cmd(self, text, wait=0.4):
+        self.ser.write(text.encode() + b"\n")
+        self.ser.flush()
+        time.sleep(wait)
+
+    def drain(self, seconds=2.0, prefix=""):
+        end = time.time() + seconds
+        out = []
+        while time.time() < end:
+            line = self.ser.readline()
+            if line:
+                try:
+                    out.append(prefix + line.decode(errors="replace").rstrip())
+                except Exception:
+                    pass
+        return out
+
+    def put_file(self, data: bytes, remote: str):
+        self.cmd(f"putb64 {remote} {len(data)}")
+        # wait for Ready B64
+        end = time.time() + 5
+        while time.time() < end:
+            line = self.ser.readline()
+            if b"Ready B64" in line:
+                break
+            if b"Error" in line or b"Failed" in line:
+                raise RuntimeError(f"putb64 rejected: {line}")
+        b64 = base64.b64encode(data)
+        final = None
+        for off in range(0, len(b64), 512):
+            self.ser.write(b64[off:off + 512] + b"\n")
+            self.ser.flush()
+            end = time.time() + 15
+            while time.time() < end:
+                line = self.ser.readline()
+                if b"ACK " in line or b"File received" in line:
+                    if b"File received" in line:
+                        final = line
+                    break
+        if final is None:
+            end = time.time() + 15
+            while time.time() < end:
+                line = self.ser.readline()
+                if b"File received" in line:
+                    final = line
+                    break
+        if final is None:
+            raise RuntimeError("no File received marker")
+        dev_fnv = int(final.split(b"fnv1a=")[1].split()[0], 16)
+        if dev_fnv != fnv1a(data):
+            raise RuntimeError("fnv1a mismatch")
+        print(f"  uploaded {len(data)}B -> {remote} (fnv ok)")
+
+    def app_running(self):
+        self.cmd("status", wait=0.5)
+        for line in self.drain(1.5):
+            if "Status:" in line:
+                return "app=launcher" not in line
+        return False
+
+    def push_app(self):
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+            for root, dirs, files in os.walk(APP_DIR):
+                dirs[:] = [d for d in dirs if d not in ("src", ".git")]
+                for f in files:
+                    if f in ("main.elf", "app.json", "handling.toml"):
+                        p = os.path.join(root, f)
+                        z.write(p, os.path.relpath(p, APP_DIR))
+        data = buf.getvalue()
+        print(f"  zip: {len(data)}B, {len(zipfile.ZipFile(io.BytesIO(data)).namelist())} files")
+        self.put_file(data, "/data/tmp/push_app.zip")
+        self.cmd("unzip /data/tmp/push_app.zip " + REMOTE, wait=1.0)
+        for line in self.drain(2.0):
+            if "UNZIP" in line or "Unzipped" in line or "Error" in line:
+                print(" ", line)
+        self.cmd("rm /data/tmp/push_app.zip", wait=0.2)
+
+    def screenshot(self, path):
+        self.ser.write(b"screenshot64\n")
+        self.ser.flush()
+        raw = bytearray()
+        w = h = 320
+        end = time.time() + 60
+        while time.time() < end:
+            line = self.ser.readline()
+            if not line:
+                continue
+            if line.startswith(b"~"):
+                raw += base64.b64decode(line[1:])
+            elif b"SCRN64 " in line:
+                for tok in line.split():
+                    if tok.startswith(b"w="):
+                        w = int(tok[2:])
+                    elif tok.startswith(b"h="):
+                        h = int(tok[2:])
+            elif b"SCRN64_END" in line:
+                fnv = int(line.split(b"fnv1a=")[1].split()[0], 16)
+                if fnv != fnv1a(bytes(raw)):
+                    raise RuntimeError("shot fnv mismatch")
+                break
+        else:
+            raise TimeoutError("screenshot timeout")
+        from PIL import Image
+        img = Image.frombytes("RGB", (w, h), bytes(w * h * 3))
+        px = img.load()
+        for i in range(w * h):
+            v = (raw[i * 2] << 8) | raw[i * 2 + 1]
+            r = (v >> 11) & 31
+            g = (v >> 5) & 63
+            b = v & 31
+            px[i % w, i // w] = (r * 255 // 31, g * 255 // 63, b * 255 // 31)
+        img.save(path)
+        print(f"  saved {path} ({w}x{h})")
+
+
+def main():
+    what = sys.argv[1] if len(sys.argv) > 1 else "all"
+    dev = Dev()
+    if what in ("all", "push"):
+        if dev.app_running():
+            print("app running — exit..."); dev.cmd("exit", wait=1.5)
+            if dev.app_running():
+                raise RuntimeError("app would not exit")
+        else:
+            print("at launcher, no exit needed")
+        print("push..."); dev.push_app()
+        print("launch..."); dev.cmd("launch rally", wait=1.5)
+        print("\n".join(dev.drain(2.0)))
+    if what in ("all", "keys"):
+        # idle_dim swallows the first key after the screen dims (wake key).
+        # Send a neutral char first to wake, wait, then the real key.
+        dev.cmd("keypress z", wait=0.4)
+        time.sleep(0.6)
+        for k in sys.argv[2:] or ["f4"]:
+            dev.cmd(f"keypress {k}", wait=0.2)
+            print(f"key {k}")
+    if what == "launch":
+        dev.cmd("launch rally", wait=1.5)
+        print("\n".join(dev.drain(2.0)))
+    if what == "shot":
+        dev.screenshot(sys.argv[2] if len(sys.argv) > 2 else "/tmp/rally_hw.png")
+    if what == "log":
+        print("\n".join(dev.drain(float(sys.argv[2]) if len(sys.argv) > 2 else 5.0)))
+
+
+if __name__ == "__main__":
+    main()
