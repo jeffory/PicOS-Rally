@@ -22,7 +22,7 @@ void sim_init(car_t *car, float x, float y, float heading) {
 }
 
 void sim_step(car_t *car, const sim_input_t *in, const tuning_t *tun,
-              const struct surface_map *smap) {
+              const surface_src_t *src) {
     const float dt = SIM_DT;
 
     // ── Input ramps (digital steering IS the handling — §9) ─────────────────
@@ -47,10 +47,10 @@ void sim_step(car_t *car, const sim_input_t *in, const tuning_t *tun,
     float lf = tun->wheelbase * tun->cg_front;         // CG to front axle
     float lr = tun->wheelbase - lf;                    // CG to rear axle
     int surf_f = SURF_GRAVEL, surf_r = SURF_GRAVEL;
-    if (smap) {
+    if (src) {
         float sh0 = mx_sin(car->heading), ch0 = mx_cos(car->heading);
-        surf_f = surface_at(smap, car->x + sh0 * lf, car->y + ch0 * lf);
-        surf_r = surface_at(smap, car->x - sh0 * lr, car->y - ch0 * lr);
+        surf_f = src->at(src->ctx, car->x + sh0 * lf, car->y + ch0 * lf);
+        surf_r = src->at(src->ctx, car->x - sh0 * lr, car->y - ch0 * lr);
     }
     float mu_f = sim_surface_mu(surf_f);
     float mu_r = sim_surface_mu(surf_r);

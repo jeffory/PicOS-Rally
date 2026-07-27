@@ -1,0 +1,91 @@
+# PicOS Rally — stage01 "Cooloola Point"
+# Catmull-Rom centreline; trackbake generates everything else from this file.
+# Coordinates in metres (x east, y north in stage space). ~2.2 km point-to-point.
+#
+# The stage (§8): fast sugarcane flats → bitumen township → paperbark forest
+# with two hairpins and a creek splash → headland climb with a crest-jump →
+# sand-blown descent to a beach-flat finish.
+
+name = "Cooloola Point"
+
+# ── S1: sugarcane flats — open, fast, long sweepers ─────────────────────────
+[[nodes]]
+x = 0.0;    y = 0.0;   width = 9.0; surface = "gravel"
+[[nodes]]
+x = 110.0;  y = 4.0;   width = 9.0; surface = "gravel"
+[[nodes]]
+x = 250.0;  y = -12.0; width = 9.0; surface = "gravel"
+[[nodes]]
+x = 380.0;  y = 22.0;  width = 9.0; surface = "gravel"
+[[nodes]]
+x = 510.0;  y = 18.0;  width = 9.0; surface = "gravel"
+
+# ── S2: township — broken bitumen, narrower ──────────────────────────────────
+[[nodes]]
+x = 640.0;  y = 8.0;   width = 7.0; surface = "bitumen"
+[[nodes]]
+x = 735.0;  y = -2.0;  width = 7.0; surface = "bitumen"
+[[nodes]]
+x = 815.0;  y = -25.0; width = 6.5; surface = "bitumen"; flags = "narrows"
+[[nodes]]
+x = 845.0;  y = 0.0;   width = 6.5; surface = "bitumen"
+[[nodes]]
+x = 925.0;  y = -4.0;  width = 7.0; surface = "bitumen"
+
+# ── S3: paperbark forest — tightens hard, two hairpins + creek ───────────────
+[[nodes]]
+x = 1005.0; y = 12.0;  width = 7.0; surface = "gravel"; flags = "narrows"
+[[nodes]]
+x = 1055.0; y = 42.0;  width = 7.0; surface = "gravel"
+[[nodes]]
+x = 1085.0; y = 82.0;  width = 8.0; surface = "gravel"; flags = "hairpin"
+[[nodes]]
+x = 1055.0; y = 118.0; width = 7.0; surface = "gravel"
+[[nodes]]
+x = 1005.0; y = 132.0; width = 7.0; surface = "gravel"
+[[nodes]]
+x = 965.0;  y = 152.0; width = 7.0; surface = "gravel"
+[[nodes]]
+x = 935.0;  y = 192.0; width = 7.0; surface = "gravel"
+[[nodes]]
+x = 965.0;  y = 232.0; width = 7.0; surface = "gravel"
+[[nodes]]
+x = 950.0;  y = 255.0; width = 7.0; surface = "gravel"
+[[nodes]]
+x = 1012.0; y = 272.0; width = 7.0; surface = "gravel"
+[[nodes]]
+x = 1065.0; y = 300.0; width = 7.0; surface = "gravel"
+[[nodes]]
+x = 1100.0; y = 318.0; width = 7.0; surface = "gravel"
+[[nodes]]
+x = 1135.0; y = 330.0; width = 8.0; surface = "gravel"; flags = "hairpin"
+[[nodes]]
+x = 1124.0; y = 350.0; width = 7.0; surface = "gravel"; flags = "water_splash,caution"
+[[nodes]]
+x = 1122.0; y = 432.0; width = 7.0; surface = "gravel"
+
+# ── S4: headland climb — crest-jump, sea on the outside ──────────────────────
+[[nodes]]
+x = 1152.0; y = 492.0; width = 8.0; surface = "gravel"
+[[nodes]]
+x = 1232.0; y = 542.0; width = 8.0; surface = "gravel"; flags = "crest,jump,caution"
+[[nodes]]
+x = 1322.0; y = 572.0; width = 8.0; surface = "gravel"
+[[nodes]]
+x = 1412.0; y = 562.0; width = 8.0; surface = "gravel"
+[[nodes]]
+x = 1500.0; y = 522.0; width = 8.0; surface = "gravel"
+
+# ── S5: sand-blown descent to the beach flat — finish ────────────────────────
+[[nodes]]
+x = 1560.0; y = 460.0; width = 9.0; surface = "sand"
+[[nodes]]
+x = 1610.0; y = 395.0; width = 9.0; surface = "sand"
+[[nodes]]
+x = 1680.0; y = 340.0; width = 9.0; surface = "sand"
+[[nodes]]
+x = 1760.0; y = 305.0; width = 9.0; surface = "sand"
+[[nodes]]
+x = 1840.0; y = 285.0; width = 9.0; surface = "sand"
+[[nodes]]
+x = 1910.0; y = 275.0; width = 9.0; surface = "sand"

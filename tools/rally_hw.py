@@ -98,7 +98,7 @@ class Dev:
             for root, dirs, files in os.walk(APP_DIR):
                 dirs[:] = [d for d in dirs if d not in ("src", ".git")]
                 for f in files:
-                    if f in ("main.elf", "app.json", "handling.toml"):
+                    if f in ("main.elf", "app.json", "handling.toml", "stage01.bin"):
                         p = os.path.join(root, f)
                         z.write(p, os.path.relpath(p, APP_DIR))
         data = buf.getvalue()

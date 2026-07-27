@@ -1,3 +1,5 @@
+// The test oval, centred on the world origin (metres, heading convention
+// 0=+Y north, clockwise): gravel/bitumen ring, creek, sand trap, grass.
 #include "surface.h"
 #include "sim.h"
 #include "mathx.h"
@@ -50,6 +52,15 @@ int surface_at(const surface_map_t *m, float x, float y) {
     }
 
     return SURF_GRASS;
+}
+
+static int oval_at(void *ctx, float x, float y) {
+    return surface_at((surface_map_t *)ctx, x, y);
+}
+
+surface_src_t surface_src_oval(surface_map_t *m) {
+    surface_src_t s = { oval_at, m };
+    return s;
 }
 
 float surface_rr_scale(int surface) {

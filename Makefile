@@ -13,7 +13,7 @@ LDFLAGS = -T ../../sdk/native/linker.ld \
 
 SRCS    = app/main.c app/stubs.c \
           core/mathx.c core/tuning.c core/sim.c core/camera.c core/render.c \
-          core/surface.c
+          core/surface.c core/track.c core/ai.c core/render_track.c
 TARGET  = main.elf
 
 .PHONY: all clean
