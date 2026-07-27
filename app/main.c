@@ -292,15 +292,18 @@ void picos_main(const PicoCalcAPI *api,
                 in.handbrake = (b & BTN_BACKSPACE) != 0;
             }
             if (s_race.state == RS_COUNTDOWN) {
-                in.throttle = 0.0f; in.brake = 1.0f; in.steer = 0.0f;
-                in.handbrake = false;
+                // Hold the car on the line; just tick the counter. (The old
+                // brake-hold triggered reverse creep — the car rolled off the
+                // line during 3-2-1 and took a false penalty at GO.)
+                car.vx = 0.0f; car.vy = 0.0f; car.yaw_rate = 0.0f;
                 if (--s_race.countdown <= 0) s_race.state = RS_RACING;
+            } else {
+                uint64_t s0 = api->sys->getTimeUs();
+                sim_step(&car, &in, &tun, &s_tsrc);
+                acc_sim += (uint32_t)(api->sys->getTimeUs() - s0);
+                if (s_race.state == RS_RACING)
+                    race_step(&s_race, &car, SIM_DT);
             }
-            uint64_t s0 = api->sys->getTimeUs();
-            sim_step(&car, &in, &tun, &s_tsrc);
-            acc_sim += (uint32_t)(api->sys->getTimeUs() - s0);
-            if (s_race.state == RS_RACING)
-                race_step(&s_race, &car, SIM_DT);
             sim_acc_us -= 16667;
             steps++;
         }
