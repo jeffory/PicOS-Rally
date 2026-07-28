@@ -1,2 +1,5 @@
 main.elf
 rally_headless
+dist/
+plat/headless/scene
+__pycache__/

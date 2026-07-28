@@ -5,6 +5,9 @@ Does the full deploy sequence over /dev/ttyACM0 without the MCP server:
 Usage: rally_hw.py [push|launch|keys|shot|log]"""
 import base64, io, os, sys, time, zipfile
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import bundle  # bundle contents are defined once, in tools/bundle.py
+
 PORT = "/dev/ttyACM0"
 APP_DIR = os.environ.get("RALLY_APP_DIR",
                          os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -94,15 +97,13 @@ class Dev:
         return False
 
     def push_app(self):
-        buf = io.BytesIO()
-        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
-            for root, dirs, files in os.walk(APP_DIR):
-                dirs[:] = [d for d in dirs if d not in ("src", ".git")]
-                for f in files:
-                    if f in ("main.elf", "app.json", "handling.toml", "stage01.bin"):
-                        p = os.path.join(root, f)
-                        z.write(p, os.path.relpath(p, APP_DIR))
-        data = buf.getvalue()
+        # Same bundle the release workflow publishes, so what is tested on
+        # device is what players download. The previous hand-rolled filter
+        # shipped no assets at all.
+        try:
+            data = bundle.build_zip_bytes(APP_DIR)
+        except bundle.BundleError as e:
+            raise RuntimeError(f"cannot build app bundle: {e}")
         print(f"  zip: {len(data)}B, {len(zipfile.ZipFile(io.BytesIO(data)).namelist())} files")
         self.put_file(data, "/data/tmp/push_app.zip")
         self.cmd("unzip /data/tmp/push_app.zip " + REMOTE, wait=1.0)
