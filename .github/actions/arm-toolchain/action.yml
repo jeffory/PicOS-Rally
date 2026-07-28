@@ -21,7 +21,12 @@ runs:
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/toolchain
-        key: arm-gnu-toolchain-${{ env.ARM_TOOLCHAIN_SHA256 }}
+        # Both the version and the hash are in the key. Version alone would
+        # collide across a checksum bump with no version change (unlikely);
+        # hash alone (the previous key) means a version bump with a stale
+        # cache entry restores the OLD compiler silently, since the download
+        # step below is skipped entirely on a cache hit.
+        key: arm-gnu-toolchain-${{ env.ARM_TOOLCHAIN_VERSION }}-${{ env.ARM_TOOLCHAIN_SHA256 }}
 
     - name: Download and verify
       if: steps.toolchain-cache.outputs.cache-hit != 'true'
@@ -30,7 +35,7 @@ runs:
         set -euo pipefail
         name="arm-gnu-toolchain-${ARM_TOOLCHAIN_VERSION}-x86_64-arm-none-eabi"
         url="https://developer.arm.com/-/media/Files/downloads/gnu/${ARM_TOOLCHAIN_VERSION}/binrel/${name}.tar.xz"
-        curl -fsSL "$url" -o /tmp/arm-toolchain.tar.xz
+        curl -fsSL --max-time 300 "$url" -o /tmp/arm-toolchain.tar.xz
         # Fails closed on any mismatch, before anything is extracted.
         echo "${ARM_TOOLCHAIN_SHA256}  /tmp/arm-toolchain.tar.xz" | sha256sum -c -
         mkdir -p "$HOME/toolchain"
@@ -41,6 +46,12 @@ runs:
       shell: bash
       run: echo "$HOME/toolchain/bin" >> "$GITHUB_PATH"
 
-    - name: Show version
+    - name: Verify installed version matches the pin
+      # On a cache hit the download/checksum step above never runs, so this
+      # is what actually proves a cache hit did not silently hand back a
+      # stale compiler from before a version bump. Case-insensitive because
+      # ARM prints "14.3.Rel1" (capital R) while the pin holds "14.3.rel1".
       shell: bash
-      run: arm-none-eabi-gcc --version
+      run: |
+        set -euo pipefail
+        arm-none-eabi-gcc --version | grep -iF "$ARM_TOOLCHAIN_VERSION"

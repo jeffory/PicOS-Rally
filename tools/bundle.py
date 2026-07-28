@@ -20,8 +20,8 @@ import zipfile
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# app/main.c:145 loads clut.bin with an exact-size check. load_bin() at
-# app/main.c:122 refuses a size mismatch, which kills the game at startup.
+# load_bin() at app/main.c:122 performs the exact-size check; a mismatch
+# refuses the file and kills the game at startup.
 CLUT_BYTES = 512
 
 # Fixed DOS timestamp (the zip epoch) so identical inputs give an identical
@@ -118,7 +118,7 @@ def verify(root, files):
             if size != CLUT_BYTES:
                 raise BundleError(
                     f"clut.bin is {size} bytes, expected {CLUT_BYTES}; "
-                    "app/main.c:145 rejects a size mismatch")
+                    "app/main.c:122 rejects a size mismatch")
             continue
         expected = hashes.get(name)
         if expected is None:

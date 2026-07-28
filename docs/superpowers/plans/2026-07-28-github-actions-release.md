@@ -610,7 +610,13 @@ if __name__ == "__main__":
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `python3 tools/test_bundle.py`
-Expected: PASS, 13 checks, `# 13/13 checks passed`, exit 0
+Expected: PASS, 15 checks, `# 15/15 checks passed`, exit 0
+
+> Note: this suite grew from 13 to 15 checks during execution. Review found
+> the sorted-order and file-mode determinism pillars were unasserted, so
+> checks for both were added. The same round fixed `ZipInfo.create_system`
+> leaking the host OS into the archive, and removed a duplicate `collect()`
+> call.
 
 - [ ] **Step 5: Exercise the CLI end to end**
 
@@ -896,7 +902,7 @@ Run the exact commands the `test` job runs:
 ( cd plat/headless && make -s && ./rally_headless ) ; echo "headless exit=$?"
 python3 tools/test_bundle.py ; echo "bundle exit=$?"
 ```
-Expected: `# 51/51 checks passed` and `headless exit=0`, then `# 13/13 checks passed` and `bundle exit=0`.
+Expected: `# 51/51 checks passed` and `headless exit=0`, then `# 15/15 checks passed` and `bundle exit=0`.
 
 - [ ] **Step 5: Commit and push on a branch**
 
@@ -1132,21 +1138,30 @@ The release pipeline is untested until a tag exists, and the bundle contents are
 - Consumes: everything from Tasks 1 to 6.
 - Produces: the published `v0.5.0` prerelease.
 
-- [ ] **Step 1: Deploy the locally built bundle to hardware**
+- [ ] **Step 1: Clear the device app directory, then deploy the locally built bundle**
 
-Unzip to a scratch dir and push from there, so only bundle contents reach the device.
+`rally_hw.py` pushes with `unzip /data/tmp/push_app.zip /apps/rally` and never
+clears that directory first. The Step 2 check below only proves the
+twelve-file list is complete if the deploy lands on an empty target: if a
+file were missing from the bundle but already present in `/apps/rally` from
+an earlier push, the game would still load, Step 2 would still pass, and the
+release would ship an incomplete bundle that fails for every fresh
+installer. Wipe `/apps/rally` on the device before this push. **The Step 2
+gate is void without this wipe** — it is not a tidiness step, it is what
+makes the check mean anything.
 
-`push_app` calls `build_zip_bytes`, which parses `core/tiles_sections.h` to learn the tile section names. That header is a source file and is deliberately not in the bundle, so it must be copied into the scratch dir for the re-bundle to work. This is a quirk of pushing from an unzipped bundle rather than from the repo, and it does not affect the release path.
+If the PicOS serial shell has no recursive remove, clear `/apps/rally` from
+an SD card reader instead (pull the card, delete the directory on the host,
+reinsert it), then proceed.
+
+Push the zip built in Task 6 Step 5, verbatim, with the new `--zip` mode, so
+what reaches the device is provably the exact bytes that will be published
+rather than a re-derivation from source:
 
 ```bash
-rm -rf /tmp/rally-bundle && mkdir -p /tmp/rally-bundle
-unzip -q dist/PicOS-Rally-v0.5.0.zip -d /tmp/rally-bundle
-find /tmp/rally-bundle -type f | sort
-mkdir -p /tmp/rally-bundle/core
-cp core/tiles_sections.h /tmp/rally-bundle/core/
-RALLY_APP_DIR=/tmp/rally-bundle python3 tools/rally_hw.py push
+python3 tools/rally_hw.py push --zip dist/PicOS-Rally-v0.5.0.zip
 ```
-Expected: `find` lists exactly the 12 bundle files (before the header copy), and the push reports a non-zero zip size with 12 files.
+Expected: the push reports the zip's exact size and 12 files.
 
 - [ ] **Step 2: Confirm the game runs from bundle contents alone**
 
@@ -1189,11 +1204,7 @@ Expected: `PicOS-Rally-v0.5.0.zip: OK` from `sha256sum`, and a successful proven
 
 This is the binary compiled by ARM 14.3.rel1 on the runner, not your local Fedora build, and it has never been executed:
 ```bash
-rm -rf /tmp/rally-ci && mkdir -p /tmp/rally-ci
-unzip -q /tmp/rally-release/PicOS-Rally-v0.5.0.zip -d /tmp/rally-ci
-# Same source-header copy as Step 1, for the same reason.
-mkdir -p /tmp/rally-ci/core && cp core/tiles_sections.h /tmp/rally-ci/core/
-RALLY_APP_DIR=/tmp/rally-ci python3 tools/rally_hw.py push
+python3 tools/rally_hw.py push --zip /tmp/rally-release/PicOS-Rally-v0.5.0.zip
 python3 tools/rally_hw.py launch
 python3 tools/rally_hw.py log
 ```
@@ -1214,7 +1225,7 @@ git push
 - [ ] **Step 7: Clean up**
 
 ```bash
-rm -rf dist /tmp/rally-bundle /tmp/rally-release /tmp/rally-ci
+rm -rf dist /tmp/rally-release
 git status --short
 ```
 Expected: a clean tree.
@@ -1223,7 +1234,7 @@ Expected: a clean tree.
 
 ## Done When
 
-- `ci.yml` runs on every push and PR, with the headless suite (51 checks), bundle tests (13 checks), and an ARM cross-build all passing.
+- `ci.yml` runs on every push and PR, with the headless suite (51 checks), bundle tests (15 checks), and an ARM cross-build all passing.
 - `tools/bundle.py` is the only place bundle contents are defined, and `rally_hw.py` uses it.
 - A corrupt asset, a wrong-sized `clut.bin`, a missing file, or a version mismatch all fail the build closed.
 - `v0.5.0` is published as a GitHub prerelease with the bundle zip, `SHA256SUMS`, and a signed provenance attestation.

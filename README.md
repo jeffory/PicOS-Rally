@@ -33,7 +33,11 @@ make            # produces main.elf
   art pipeline: PixelLab PNGs (`art/`) → palette-locked 8bpp bins
   (`assets/`). Palette source of truth: `art/style.toml`.
 - `tools/rally_hw.py` — serial driver for hardware: zip+push, launch,
-  keypresses, screenshots (env `RALLY_APP_DIR` overrides the app dir).
+  keypresses, screenshots (env `RALLY_APP_DIR` overrides the source tree the
+  bundle is re-derived from, not a prebuilt output dir; it must contain
+  `core/tiles_sections.h` and `assets/manifest.json` alongside the usual
+  bundle files, since the deploy path re-derives the bundle from source. To
+  push an existing zip verbatim instead, use `rally_hw.py push --zip PATH`).
 
 ## Layout
 

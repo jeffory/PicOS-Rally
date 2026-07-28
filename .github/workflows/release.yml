@@ -15,12 +15,18 @@ jobs:
   release:
     name: Build and publish prerelease
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     permissions:
       contents: write       # create the release
       id-token: write       # sign the provenance attestation
       attestations: write   # record the provenance attestation
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # GH_TOKEN is passed explicitly to the publish step below; the
+          # checkout does not need to leave a contents:write token sitting
+          # in .git/config for the rest of this job.
+          persist-credentials: false
 
       - name: Install ARM toolchain
         uses: ./.github/actions/arm-toolchain

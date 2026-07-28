@@ -2,7 +2,9 @@
 """Standalone PicOS hardware driver for the rally M1 spike.
 Does the full deploy sequence over /dev/ttyACM0 without the MCP server:
   exit app -> zip+push -> relaunch -> keypresses -> tail logs -> screenshot
-Usage: rally_hw.py [push|launch|keys|shot|log]"""
+Usage: rally_hw.py [push|launch|keys|shot|log] [--zip PATH]
+  --zip PATH  push this prebuilt zip verbatim (with push/all), instead of
+              re-deriving the bundle from RALLY_APP_DIR via bundle.py"""
 import base64, io, os, sys, time, zipfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -96,14 +98,22 @@ class Dev:
                 return "app=launcher" not in line
         return False
 
-    def push_app(self):
+    def push_app(self, zip_path=None):
         # Same bundle the release workflow publishes, so what is tested on
         # device is what players download. The previous hand-rolled filter
         # shipped no assets at all.
-        try:
-            data = bundle.build_zip_bytes(APP_DIR)
-        except bundle.BundleError as e:
-            raise RuntimeError(f"cannot build app bundle: {e}")
+        #
+        # zip_path pushes an existing archive verbatim, e.g. a zip already
+        # published by the release workflow, skipping re-derivation entirely
+        # so what gets pushed is provably byte-for-byte what was built.
+        if zip_path is not None:
+            with open(zip_path, "rb") as f:
+                data = f.read()
+        else:
+            try:
+                data = bundle.build_zip_bytes(APP_DIR)
+            except bundle.BundleError as e:
+                raise RuntimeError(f"cannot build app bundle: {e}")
         print(f"  zip: {len(data)}B, {len(zipfile.ZipFile(io.BytesIO(data)).namelist())} files")
         self.put_file(data, "/data/tmp/push_app.zip")
         self.cmd("unzip /data/tmp/push_app.zip " + REMOTE, wait=1.0)
@@ -151,7 +161,13 @@ class Dev:
 
 
 def main():
-    what = sys.argv[1] if len(sys.argv) > 1 else "all"
+    argv = sys.argv[1:]
+    zip_path = None
+    if "--zip" in argv:
+        i = argv.index("--zip")
+        zip_path = argv[i + 1]
+        del argv[i:i + 2]
+    what = argv[0] if argv else "all"
     dev = Dev()
     if what in ("all", "push"):
         if dev.app_running():
@@ -160,7 +176,7 @@ def main():
                 raise RuntimeError("app would not exit")
         else:
             print("at launcher, no exit needed")
-        print("push..."); dev.push_app()
+        print("push..."); dev.push_app(zip_path=zip_path)
         print("launch..."); dev.cmd("launch rally", wait=1.5)
         print("\n".join(dev.drain(2.0)))
     if what in ("all", "keys"):
@@ -168,21 +184,21 @@ def main():
         # Send a neutral char first to wake, wait, then the real key.
         dev.cmd("keypress z", wait=0.4)
         time.sleep(0.6)
-        for k in sys.argv[2:] or ["f4"]:
+        for k in argv[1:] or ["f4"]:
             dev.cmd(f"keypress {k}", wait=0.2)
             print(f"key {k}")
     if what == "launch":
         dev.cmd("launch rally", wait=1.5)
         print("\n".join(dev.drain(2.0)))
     if what == "put":
-        local, remote = sys.argv[2], sys.argv[3]
+        local, remote = argv[1], argv[2]
         with open(local, "rb") as fh:
             dev.put_file(fh.read(), remote)
         print(f"put {local} -> {remote}")
     if what == "shot":
-        dev.screenshot(sys.argv[2] if len(sys.argv) > 2 else "/tmp/rally_hw.png")
+        dev.screenshot(argv[1] if len(argv) > 1 else "/tmp/rally_hw.png")
     if what == "log":
-        print("\n".join(dev.drain(float(sys.argv[2]) if len(sys.argv) > 2 else 5.0)))
+        print("\n".join(dev.drain(float(argv[1]) if len(argv) > 1 else 5.0)))
 
 
 if __name__ == "__main__":
