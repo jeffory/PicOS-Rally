@@ -9,10 +9,17 @@ The bundle mirrors the on-device app dir that app/main.c expects: assets/
 for art (app/main.c:116), tuning/handling.toml (app/main.c:180), and
 stage01.bin at the root (app/main.c:196).
 """
+import hashlib
+import json
 import os
 import re
+import sys
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# app/main.c:145 loads clut.bin with an exact-size check. load_bin() at
+# app/main.c:122 refuses a size mismatch, which kills the game at startup.
+CLUT_BYTES = 512
 
 # Root-relative bundle members that are not assets.
 BASE_FILES = ("main.elf", "app.json", "stage01.bin", "tuning/handling.toml")
@@ -59,3 +66,82 @@ def bundle_files(root):
     rels += [f"assets/tiles_{n}.bin" for n in tile_section_names(root)]
     return sorted(((os.path.join(root, r), r) for r in rels),
                   key=lambda pair: pair[1])
+
+
+def _sha256(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 16), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _manifest_hashes(root):
+    """Map asset filename to its expected sha256, from assets/manifest.json."""
+    path = os.path.join(root, "assets", "manifest.json")
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            manifest = json.load(f)
+    except OSError as e:
+        raise BundleError(f"cannot read {path}: {e}")
+    except json.JSONDecodeError as e:
+        raise BundleError(f"{path} is not valid JSON: {e}")
+    out = {}
+    for entry in manifest.values():
+        if isinstance(entry, dict) and "bin" in entry and "bin_sha256" in entry:
+            out[entry["bin"]] = entry["bin_sha256"]
+    return out
+
+
+def verify(root, files):
+    """Fail closed on anything that would break the app at load time."""
+    for src, arc in files:
+        if not os.path.isfile(src):
+            raise BundleError(f"missing bundle file: {arc}")
+
+    hashes = _manifest_hashes(root)
+    for src, arc in files:
+        if not arc.startswith("assets/"):
+            continue
+        name = os.path.basename(arc)
+        # clut.bin has no manifest entry (palettize.py does not record one),
+        # so its exact length is the only check available.
+        if name == "clut.bin":
+            size = os.path.getsize(src)
+            if size != CLUT_BYTES:
+                raise BundleError(
+                    f"clut.bin is {size} bytes, expected {CLUT_BYTES}; "
+                    "app/main.c:145 rejects a size mismatch")
+            continue
+        expected = hashes.get(name)
+        if expected is None:
+            raise BundleError(
+                f"{arc} has no bin_sha256 entry in assets/manifest.json")
+        actual = _sha256(src)
+        if actual != expected:
+            raise BundleError(
+                f"{arc} sha256 {actual} does not match manifest {expected}")
+
+
+def check_version(root, expected):
+    """Assert app.json's version equals `expected` (the tag minus its v)."""
+    path = os.path.join(root, "app.json")
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            app = json.load(f)
+    except OSError as e:
+        raise BundleError(f"cannot read {path}: {e}")
+    except json.JSONDecodeError as e:
+        raise BundleError(f"{path} is not valid JSON: {e}")
+    actual = app.get("version")
+    if actual != expected:
+        raise BundleError(
+            f"app.json version is {actual!r} but the tag expects {expected!r}; "
+            "bump app.json and commit before tagging")
+
+
+def collect(root=REPO_ROOT):
+    """Verified bundle contents. Raises BundleError if the tree is unfit."""
+    files = bundle_files(root)
+    verify(root, files)
+    return files

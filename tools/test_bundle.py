@@ -85,7 +85,7 @@ def main():
     with tempfile.TemporaryDirectory() as tmp:
         root = make_fixture(tmp)
 
-        files = bundle.bundle_files(root)
+        files = bundle.collect(root)
         arcs = [a for _, a in files]
         check("bundle contains exactly 12 files", len(files) == 12)
         check("bundle arcnames match the expected set", arcs == EXPECTED)
@@ -96,6 +96,42 @@ def main():
               bundle.tile_section_names(root) == [
                   "wang_water_sand", "wang_sand_grass",
                   "wang_grass_gravel", "proc"])
+
+        with open(os.path.join(root, "app.json"), encoding="utf-8") as f:
+            version = json.load(f)["version"]
+        try:
+            bundle.check_version(root, version)
+            matched = True
+        except bundle.BundleError:
+            matched = False
+        check("matching version passes the gate", matched)
+        raises("mismatched version fails the gate",
+               lambda: bundle.check_version(root, "9.9.9"))
+
+    # Each tampering case needs its own clean fixture.
+    with tempfile.TemporaryDirectory() as tmp:
+        root = make_fixture(tmp)
+        p = os.path.join(root, "assets", "car.bin")
+        with open(p, "rb") as f:
+            data = bytearray(f.read())
+        data[0] ^= 0xFF
+        with open(p, "wb") as f:
+            f.write(bytes(data))
+        raises("tampered asset fails the manifest sha256 check",
+               lambda: bundle.collect(root))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = make_fixture(tmp)
+        with open(os.path.join(root, "assets", "clut.bin"), "ab") as f:
+            f.write(b"\x00")
+        raises("clut.bin of the wrong size is rejected",
+               lambda: bundle.collect(root))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = make_fixture(tmp)
+        os.remove(os.path.join(root, "tuning", "handling.toml"))
+        raises("a missing bundle file is a hard failure",
+               lambda: bundle.collect(root))
 
     print(f"1..{_checks}")
     print(f"# {_checks - _failures}/{_checks} checks passed")
