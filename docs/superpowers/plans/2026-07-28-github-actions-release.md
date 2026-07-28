@@ -848,9 +848,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Build and run the headless suite
+        # Must run from plat/headless. The runner opens ../../stage01.bin
+        # (plat/headless/main.c:187) and ../../assets/clut.bin (:355) relative
+        # to the working directory. From the repo root the stage load fails
+        # and 17 of the 51 checks are silently skipped, reporting 34 total.
+        # README.md:27 documents this convention.
+        working-directory: plat/headless
         run: |
-          make -C plat/headless
-          ./plat/headless/rally_headless
+          make
+          ./rally_headless
 
       - name: Run bundle tests
         run: python3 tools/test_bundle.py
@@ -887,7 +893,7 @@ Expected: both listed as valid. If PyYAML is unavailable, run `pip install --use
 
 Run the exact commands the `test` job runs:
 ```bash
-make -C plat/headless && ./plat/headless/rally_headless ; echo "headless exit=$?"
+( cd plat/headless && make -s && ./rally_headless ) ; echo "headless exit=$?"
 python3 tools/test_bundle.py ; echo "bundle exit=$?"
 ```
 Expected: `# 51/51 checks passed` and `headless exit=0`, then `# 13/13 checks passed` and `bundle exit=0`.
@@ -996,9 +1002,12 @@ jobs:
         uses: ./.github/actions/arm-toolchain
 
       - name: Run the headless suite
+        # Must run from plat/headless, same reason as ci.yml: the runner opens
+        # ../../stage01.bin and ../../assets/clut.bin relative to cwd.
+        working-directory: plat/headless
         run: |
-          make -C plat/headless
-          ./plat/headless/rally_headless
+          make
+          ./rally_headless
 
       - name: Run bundle tests
         run: python3 tools/test_bundle.py
