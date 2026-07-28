@@ -1150,18 +1150,45 @@ installer. Wipe `/apps/rally` on the device before this push. **The Step 2
 gate is void without this wipe** — it is not a tidiness step, it is what
 makes the check mean anything.
 
-If the PicOS serial shell has no recursive remove, clear `/apps/rally` from
-an SD card reader instead (pull the card, delete the directory on the host,
-reinsert it), then proceed.
+The serial shell does have a recursive `rm`, so the wipe can be done over the
+wire. Two hazards, both hit during the first real run of this procedure:
 
-Push the zip built in Task 6 Step 5, verbatim, with the new `--zip` mode, so
-what reaches the device is provably the exact bytes that will be published
-rather than a re-derivation from source:
+**Stop the app first, and confirm it stopped.** Sending `rm /apps/rally`
+while the app is running hardfaults the firmware and reboots the device
+(`PC = 0x00000000`, recorded in `crashlog`), leaving the wipe half finished.
+Issuing `exit` is not sufficient on its own, because it returns before the
+app has gone. Poll `status` until it reports `app=launcher`, then remove:
+
+```bash
+# check: status must say app=launcher before proceeding
+rm /apps/rally
+ls /apps/rally      # expect: 0 items
+```
+
+If the shell ever lacks recursive remove, clear `/apps/rally` from an SD card
+reader instead (pull the card, delete the directory on the host, reinsert).
+
+Push the zip built in Task 6 Step 5, verbatim, with the `--zip` mode, so what
+reaches the device is provably the exact bytes that will be published rather
+than a re-derivation from source:
 
 ```bash
 python3 tools/rally_hw.py push --zip dist/PicOS-Rally-v0.5.0.zip
 ```
-Expected: the push reports the zip's exact size and 12 files.
+Expected: the push reports the zip's exact size and 12 files, and the device
+reports `UNZIP 12/12`.
+
+**Reboot before launching.** The launcher builds its app registry at boot, so
+deleting `/apps/rally` drops `rally` from it and re-unzipping the files does
+not re-register it. `launch rally` will fail with `Error: app 'rally' not
+found` until the device is rebooted. This is expected after a wipe, not a
+sign the bundle is bad:
+
+```bash
+# over serial: reboot
+# wait for the device to re-enumerate (the port number may change,
+# ACM0 -> ACM1; detect_port() handles this automatically)
+```
 
 - [ ] **Step 2: Confirm the game runs from bundle contents alone**
 
@@ -1171,13 +1198,26 @@ python3 tools/rally_hw.py log
 ```
 Expected in the log: `RALLY: stage loaded:` with point, note and checkpoint counts, and `RALLY: assets loaded (clut, 4 tile secs, car, props, hero)`. Neither `stage01.bin missing or bad` nor `assets missing (assets/*.bin)` should appear.
 
-Then drive it. Take a screenshot to confirm the render is right:
+Then drive it. Throttle is **F5 held** (`app/main.c:500`), brake is F4, left
+and right steer, backspace is the handbrake. F5 also starts the stage from
+the intro plate. Take a screenshot to confirm the render is right:
 ```bash
 python3 tools/rally_hw.py shot /tmp/rally-bundle-check.png
 ```
 Expected: a recognisable Cooloola Point frame, not a red error screen.
 
 **Gate:** do not proceed past this step if the game does not load. A failure here means the 12-file list is incomplete, which is exactly what this check exists to catch. Add the missing file to `BASE_FILES` or `SPRITE_ASSETS` in `tools/bundle.py`, update `EXPECTED` in `tools/test_bundle.py`, and repeat from Task 3 Step 4.
+
+> **This gate has been run and passed, 2026-07-28.** The device was wiped to
+> `0 items in /apps/rally`, the bundle pushed with `--zip` (82815 bytes,
+> `UNZIP 12/12`), and the device rebooted. `ls` then showed exactly the twelve
+> bundle files and nothing else. The game loaded with `stage loaded: 1336 pts,
+> 21 notes, 12 cps, grid 518x190`, `assets loaded (clut, 4 tile secs, car,
+> props, hero)` and `tuning: 25 keys applied, 0 unknown`, then drove to
+> 73 km/h over 88 m with pacenotes and dust rendering. The twelve-file list is
+> verified against real hardware, not merely against a reading of
+> `app/main.c`. Note this used a locally built `main.elf`; Step 5 still has to
+> repeat it for the CI-built binary.
 
 - [ ] **Step 3: Tag and push**
 
