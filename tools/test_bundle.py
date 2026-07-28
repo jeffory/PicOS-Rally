@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """TAP tests for tools/bundle.py.
 
-Hermetic: every case builds a throwaway app dir under tempfile, so the real
-repo is never mutated. That matters because several cases need a corrupted
-asset. It also means these tests need no ARM build, so they can run in the
-host-only CI job where main.elf does not exist.
+Each test builds a throwaway app dir under tempfile, so the real repo is
+never mutated. This hermetic approach lets tests run without an ARM build or
+a pre-built main.elf.
 """
 import json
 import os
@@ -71,7 +70,8 @@ def make_fixture(tmp):
     os.makedirs(os.path.join(tmp, "core"))
     shutil.copy2(os.path.join(REPO_ROOT, "core", "tiles_sections.h"),
                  os.path.join(tmp, "core", "tiles_sections.h"))
-    # collect() only checks that main.elf exists; it never parses it.
+    # Stub main.elf so the fixture has the binary to resolve; its contents
+    # are never read by bundle_files().
     with open(os.path.join(tmp, "main.elf"), "wb") as f:
         f.write(b"\x7fELF stub")
     # The vendored SDK example that a glob would wrongly pick up.
