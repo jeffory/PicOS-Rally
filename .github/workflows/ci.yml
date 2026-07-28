@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Least privilege. Nothing here needs to write.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Host tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build and run the headless suite
+        # Must run from plat/headless. The runner opens ../../stage01.bin
+        # (plat/headless/main.c:187) and ../../assets/clut.bin (:355) relative
+        # to the working directory. From the repo root the stage load fails
+        # and 17 of the 51 checks are silently skipped, reporting 34 total.
+        # README.md:27 documents this convention.
+        working-directory: plat/headless
+        run: |
+          make
+          ./rally_headless
+
+      - name: Run bundle tests
+        run: python3 tools/test_bundle.py
+
+  build:
+    name: ARM cross-build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install ARM toolchain
+        uses: ./.github/actions/arm-toolchain
+
+      - name: Build main.elf
+        run: make
+
+      - name: Report binary size
+        run: arm-none-eabi-size main.elf
