@@ -154,13 +154,19 @@ def collect(root=REPO_ROOT):
     return files
 
 
-def build_zip_bytes(root=REPO_ROOT):
+def build_zip_bytes(root=REPO_ROOT, files=None):
     """Deterministic zip: verified contents, sorted, fixed timestamps."""
+    if files is None:
+        files = collect(root)
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
-        for src, arc in collect(root):
+        for src, arc in files:
             info = zipfile.ZipInfo(arc, date_time=ZIP_TIMESTAMP)
             info.compress_type = zipfile.ZIP_DEFLATED
+            # ZIP spec traditionally encodes on Unix (3) or Windows (0). Setting
+            # create_system = 0 fixes the host OS leak so identical inputs produce
+            # a byte-identical archive regardless of the build machine.
+            info.create_system = 0
             info.external_attr = 0o644 << 16
             with open(src, "rb") as f:
                 z.writestr(info, f.read())
@@ -181,7 +187,7 @@ def main(argv=None):
         if args.expect_version:
             check_version(args.app_dir, args.expect_version)
         files = collect(args.app_dir)
-        data = build_zip_bytes(args.app_dir)
+        data = build_zip_bytes(args.app_dir, files=files)
     except BundleError as e:
         print(f"bundle: {e}", file=sys.stderr)
         return 1

@@ -118,8 +118,13 @@ def main():
         with _zf.ZipFile(_io.BytesIO(first)) as z:
             check("zip entries match the expected set",
                   sorted(z.namelist()) == EXPECTED)
+            check("zip entries are written in sorted order",
+                  z.namelist() == EXPECTED)
             check("zip timestamps are fixed",
                   all(i.date_time == bundle.ZIP_TIMESTAMP
+                      for i in z.infolist()))
+            check("zip file mode is fixed",
+                  all(i.external_attr == 0o644 << 16
                       for i in z.infolist()))
 
     # Each tampering case needs its own clean fixture.
