@@ -160,14 +160,43 @@ class Dev:
         print(f"  saved {path} ({w}x{h})")
 
 
-def main():
-    argv = sys.argv[1:]
+VERBS = ("all", "push", "launch", "keys", "put", "shot", "log")
+
+
+def parse_argv(argv):
+    """Split argv into (verb, zip_path, rest).
+
+    Pure and side-effect free so it can be exercised without a device.
+    Raises SystemExit with a usable message on any misuse, rather than
+    letting a bad invocation fall through to a confusing IndexError.
+    """
+    rest = list(argv)
     zip_path = None
-    if "--zip" in argv:
-        i = argv.index("--zip")
-        zip_path = argv[i + 1]
-        del argv[i:i + 2]
-    what = argv[0] if argv else "all"
+    if "--zip" in rest:
+        i = rest.index("--zip")
+        if i + 1 >= len(rest):
+            raise SystemExit("rally_hw: --zip needs a path, e.g. --zip dist/app.zip")
+        zip_path = rest[i + 1]
+        if zip_path.startswith("-"):
+            raise SystemExit(f"rally_hw: --zip needs a path, got the flag {zip_path!r}")
+        del rest[i:i + 2]
+
+    what = rest[0] if rest else "all"
+    if what not in VERBS:
+        raise SystemExit(
+            f"rally_hw: unknown command {what!r}; expected one of {', '.join(VERBS)}")
+
+    if zip_path is not None:
+        if what not in ("all", "push"):
+            raise SystemExit(f"rally_hw: --zip applies to push or all, not {what}")
+        if not os.path.isfile(zip_path):
+            raise SystemExit(f"rally_hw: no such zip: {zip_path}")
+
+    return what, zip_path, rest
+
+
+def main():
+    what, zip_path, argv = parse_argv(sys.argv[1:])
     dev = Dev()
     if what in ("all", "push"):
         if dev.app_running():
