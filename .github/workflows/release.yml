@@ -1,0 +1,131 @@
+name: Release
+
+on:
+  push:
+    tags: ['v[0-9]*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish prerelease
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write       # create the release
+      id-token: write       # sign the provenance attestation
+      attestations: write   # record the provenance attestation
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # GH_TOKEN is passed explicitly to the publish step below; the
+          # checkout does not need to leave a contents:write token sitting
+          # in .git/config for the rest of this job.
+          persist-credentials: false
+
+      - name: Install ARM toolchain
+        uses: ./.github/actions/arm-toolchain
+
+      - name: Run the headless suite
+        # Must run from plat/headless, same reason as ci.yml: the runner opens
+        # ../../stage01.bin and ../../assets/clut.bin relative to cwd.
+        working-directory: plat/headless
+        run: |
+          set -euo pipefail
+          make
+          ./rally_headless
+
+      - name: Run bundle tests
+        run: python3 tools/test_bundle.py
+
+      - name: Build main.elf
+        run: |
+          set -euo pipefail
+          make
+          arm-none-eabi-size main.elf
+
+      - name: Derive version from tag
+        id: ver
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          version="${tag#v}"
+          if [ -z "$version" ]; then
+            echo "::error::tag '$tag' yields an empty version" >&2
+            exit 1
+          fi
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Package bundle
+        env:
+          TAG: ${{ steps.ver.outputs.tag }}
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -euo pipefail
+          python3 tools/bundle.py \
+            --out "dist/PicOS-Rally-${TAG}.zip" \
+            --expect-version "${VERSION}"
+
+      - name: Write SHA256SUMS
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum ./*.zip > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        with:
+          subject-path: dist/PicOS-Rally-${{ steps.ver.outputs.tag }}.zip
+
+      - name: Write release notes
+        env:
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: |
+          set -euo pipefail
+          cat > dist/NOTES.md <<'EOF'
+          Prerelease build of PicOS Rally for the ClockworkPi PicoCalc v2.0,
+          running on PicOS. One stage: Cooloola Point, roughly 2.7 km of
+          Queensland coastal gravel.
+
+          ## Install
+
+          Unzip onto the SD card so the contents land in the app directory
+          (`/apps/rally`), keeping the `assets/` and `tuning/` folders intact.
+
+          ## Verify the download
+
+          ```
+          sha256sum -c SHA256SUMS
+          EOF
+          printf 'gh attestation verify PicOS-Rally-%s.zip --repo jeffory/PicOS-Rally\n' "$TAG" >> dist/NOTES.md
+          cat >> dist/NOTES.md <<'EOF'
+          ```
+
+          ## What is not yet verified
+
+          This is a prerelease. The audio mix has not passed a human ear test
+          (engine pitch against speed, gravel roar level, event balance), and
+          the M4 visual checks on gravel hue and sand contrast are still
+          outstanding. See ROADMAP.md.
+          EOF
+          cat dist/NOTES.md
+
+      - name: Create prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: |
+          set -euo pipefail
+          gh release create "${TAG}" \
+            --prerelease \
+            --title "PicOS Rally ${TAG}" \
+            --notes-file dist/NOTES.md \
+            "dist/PicOS-Rally-${TAG}.zip" \
+            dist/SHA256SUMS
