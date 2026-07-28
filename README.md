@@ -48,6 +48,10 @@ make            # produces main.elf
 - `NOTES.md` — the running engineering log (M0-M5: measurements, decisions,
   tuning, hardware findings)
 
+## Roadmap
+
+See [ROADMAP.md](ROADMAP.md) for M6 and outstanding work.
+
 ## History
 
 Extracted from the PicOS repo (`apps/rally/`) on 2026-07-28 with the
