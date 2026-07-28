@@ -1,6 +1,9 @@
 # PicOS Rally — NOTES.md
 
 Milestone 0 findings first; tuning observations and hardware findings accrete here.
+
+> **2026-07-28: extracted to its own repo — https://github.com/jeffory/PicOS-Rally**
+> (paths updated: sdk at sdk/native, source art at art/). NOTES.md continues here.
 This file is the artefact that survives the project. Date format: 2026-07-26.
 
 ---

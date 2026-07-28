@@ -1,0 +1,10 @@
+[
+  {"file": "../png/car_south.png",      "deg": 0},
+  {"file": "../png/car_south-east.png", "deg": 45},
+  {"file": "../png/car_east.png",       "deg": 90},
+  {"file": "../png/car_north-east.png", "deg": 135},
+  {"file": "../png/car_north.png",      "deg": 180},
+  {"file": "../png/car_north-west.png", "deg": 225},
+  {"file": "../png/car_west.png",       "deg": 270},
+  {"file": "../png/car_south-west.png", "deg": 315}
+]

@@ -115,10 +115,9 @@ class Palettizer:
 
 def find_style_toml():
     here = os.path.dirname(os.path.abspath(__file__))
-    # tools/ is at apps/rally/tools; assets worktree is a sibling checkout.
+    # tools/ is at <repo>/tools; source art lives in <repo>/art.
     candidates = [
-        os.path.join(here, "..", "..", "..", "..", "picos-rally-assets", "assets", "rally", "style.toml"),
-        os.path.join(here, "..", "..", "..", "picos-rally-assets", "assets", "rally", "style.toml"),
+        os.path.join(here, "..", "art", "style.toml"),
         os.environ.get("RALLY_STYLE", ""),
     ]
     for c in candidates:

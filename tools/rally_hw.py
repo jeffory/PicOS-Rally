@@ -6,7 +6,8 @@ Usage: rally_hw.py [push|launch|keys|shot|log]"""
 import base64, io, os, sys, time, zipfile
 
 PORT = "/dev/ttyACM0"
-APP_DIR = "/home/keith/Projects/picos-rally/apps/rally"
+APP_DIR = os.environ.get("RALLY_APP_DIR",
+                         os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 REMOTE = "/apps/rally"
 
 import serial  # pyserial

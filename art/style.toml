@@ -1,0 +1,85 @@
+# PicOS Rally — locked palette. seed 20260726.
+# 48 colors, indices 0-47 of the 256-entry CLUT. Every shipped asset is
+# snapped to these by tools/palettize.py (no dithering — PixelLab output is
+# already pixel art). Indices 48-255 are derived at load: for each locked
+# color, 4 shade steps (-20%, -10%, +10%, +20% brightness, clamped) fill
+# 48*4=192 entries 48-239; 240-254 reserved (per-stage accents); 255 =
+# transparent (sprite mask key, never drawn).
+#
+# CLUT layout used by core/gfx.c:
+#   idx = base           → the locked color
+#   idx = 48 + base*4+0  → -20%
+#   idx = 48 + base*4+1  → -10%
+#   idx = 48 + base*4+2  → +10%
+#   idx = 48 + base*4+3  → +20%
+
+[palette]
+seed = 20260726
+
+# terrain greens (0-5)
+scrub_deep    = "#2E4A2B"
+grass_mid     = "#4A6B35"
+grass_dry     = "#7A8B4A"
+spinifex      = "#9AA055"
+cane_green    = "#5E7A3A"
+dune_grass    = "#8B9460"
+
+# gravel / red ochre (6-10)
+gravel_deep   = "#6E3B2A"
+gravel_mid    = "#96523A"
+gravel_light  = "#B06B4A"
+gravel_dust   = "#C98B62"
+rut_dark      = "#54301F"
+
+# sand (11-14)
+sand_wet      = "#C2A87B"
+sand_dry      = "#E0CC9C"
+sand_light    = "#EFE0B4"
+sand_shadow   = "#A8906A"
+
+# bitumen (15-18)
+bitumen_deep  = "#3A3A40"
+bitumen_mid   = "#4E4E56"
+bitumen_light = "#66666E"
+line_white    = "#D8D8D0"
+
+# water (19-23)
+water_deep    = "#1E4A5E"
+water_mid     = "#2E7A8C"
+water_light   = "#55A8B0"
+water_foam    = "#D8EAE4"
+creek         = "#3E6A70"
+
+# mud (24-26)
+mud_deep      = "#5E4632"
+mud_mid       = "#7A5C40"
+mud_light     = "#8F7050"
+
+# car (27-32)
+car_white     = "#F0EEE8"
+car_red       = "#C23A2E"
+car_blue      = "#2A4A8C"
+car_black     = "#1E1E22"
+car_glass     = "#3A5A6E"
+car_chrome    = "#B8BCC0"
+
+# props (33-38)
+gum_bark      = "#8A7A68"
+gum_leaf      = "#4E6E46"
+dead_wood     = "#6E5E4E"
+rock_grey     = "#7E7A72"
+sign_red      = "#D84A3A"
+sign_yellow   = "#E8C84A"
+
+# effects (39-42)
+dust_puff     = "#D8C4A0"
+shadow_dark   = "#2A241E"
+skid_dark     = "#2E2A26"
+crest_flash   = "#F0E8C8"
+
+# HUD (43-47)
+hud_amber     = "#F0B040"
+hud_amber_dim = "#A87828"
+hud_panel     = "#16181C"
+hud_panel_lit = "#2A2E34"
+hud_text      = "#E8E8E0"

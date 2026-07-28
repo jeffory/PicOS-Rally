@@ -1,0 +1,110 @@
+[
+ {
+  "key": "path:0",
+  "src": 0
+ },
+ {
+  "key": "path:1",
+  "src": 1
+ },
+ {
+  "key": "path:2",
+  "src": 1,
+  "rot": 90
+ },
+ {
+  "key": "path:3",
+  "src": 3
+ },
+ {
+  "key": "path:4",
+  "src": 4
+ },
+ {
+  "key": "path:5",
+  "src": 2
+ },
+ {
+  "key": "path:6",
+  "src": 3,
+  "rot": 90
+ },
+ {
+  "key": "path:7",
+  "src": 8
+ },
+ {
+  "key": "path:8",
+  "src": 4,
+  "rot": 90
+ },
+ {
+  "key": "path:9",
+  "src": 5
+ },
+ {
+  "key": "path:10",
+  "src": 2,
+  "rot": 90
+ },
+ {
+  "key": "path:11",
+  "src": 6
+ },
+ {
+  "key": "path:12",
+  "src": 3,
+  "rot": 180
+ },
+ {
+  "key": "path:13",
+  "src": 9
+ },
+ {
+  "key": "path:14",
+  "src": 8,
+  "rot": 90
+ },
+ {
+  "key": "path:15",
+  "src": 16
+ },
+ {
+  "key": "pathvar:5",
+  "src": 7
+ },
+ {
+  "key": "pathvar:3",
+  "src": 10
+ },
+ {
+  "key": "pathvar:9",
+  "src": 11
+ },
+ {
+  "key": "pathvar:7",
+  "src": 12
+ },
+ {
+  "key": "pathvar:13",
+  "src": 13
+ },
+ {
+  "key": "pathvar:7b",
+  "src": 14
+ },
+ {
+  "key": "pathvar:7c",
+  "src": 15
+ },
+ {
+  "key": "roadfill",
+  "src": 2,
+  "crop": [
+   8,
+   8,
+   16,
+   16
+  ]
+ }
+]
