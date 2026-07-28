@@ -108,6 +108,20 @@ def main():
         raises("mismatched version fails the gate",
                lambda: bundle.check_version(root, "9.9.9"))
 
+        first = bundle.build_zip_bytes(root)
+        second = bundle.build_zip_bytes(root)
+        check("two builds are byte-identical", first == second)
+        check("zip is non-empty", len(first) > 0)
+
+        import zipfile as _zf
+        import io as _io
+        with _zf.ZipFile(_io.BytesIO(first)) as z:
+            check("zip entries match the expected set",
+                  sorted(z.namelist()) == EXPECTED)
+            check("zip timestamps are fixed",
+                  all(i.date_time == bundle.ZIP_TIMESTAMP
+                      for i in z.infolist()))
+
     # Each tampering case needs its own clean fixture.
     with tempfile.TemporaryDirectory() as tmp:
         root = make_fixture(tmp)

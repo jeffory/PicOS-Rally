@@ -9,17 +9,24 @@ The bundle mirrors the on-device app dir that app/main.c expects: assets/
 for art (app/main.c:116), tuning/handling.toml (app/main.c:180), and
 stage01.bin at the root (app/main.c:196).
 """
+import argparse
 import hashlib
+import io
 import json
 import os
 import re
 import sys
+import zipfile
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # app/main.c:145 loads clut.bin with an exact-size check. load_bin() at
 # app/main.c:122 refuses a size mismatch, which kills the game at startup.
 CLUT_BYTES = 512
+
+# Fixed DOS timestamp (the zip epoch) so identical inputs give an identical
+# archive. Without this, mtimes leak in and every build differs.
+ZIP_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
 
 # Root-relative bundle members that are not assets.
 BASE_FILES = ("main.elf", "app.json", "stage01.bin", "tuning/handling.toml")
@@ -145,3 +152,49 @@ def collect(root=REPO_ROOT):
     files = bundle_files(root)
     verify(root, files)
     return files
+
+
+def build_zip_bytes(root=REPO_ROOT):
+    """Deterministic zip: verified contents, sorted, fixed timestamps."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for src, arc in collect(root):
+            info = zipfile.ZipInfo(arc, date_time=ZIP_TIMESTAMP)
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = 0o644 << 16
+            with open(src, "rb") as f:
+                z.writestr(info, f.read())
+    return buf.getvalue()
+
+
+def main(argv=None):
+    p = argparse.ArgumentParser(
+        description="Package a PicOS Rally app bundle.")
+    p.add_argument("--out", required=True, help="output zip path")
+    p.add_argument("--expect-version",
+                   help="fail unless app.json's version equals this")
+    p.add_argument("--app-dir", default=REPO_ROOT,
+                   help="source tree to bundle (default: repo root)")
+    args = p.parse_args(argv)
+
+    try:
+        if args.expect_version:
+            check_version(args.app_dir, args.expect_version)
+        files = collect(args.app_dir)
+        data = build_zip_bytes(args.app_dir)
+    except BundleError as e:
+        print(f"bundle: {e}", file=sys.stderr)
+        return 1
+
+    out_dir = os.path.dirname(os.path.abspath(args.out))
+    os.makedirs(out_dir, exist_ok=True)
+    with open(args.out, "wb") as f:
+        f.write(data)
+    print(f"bundle: {args.out} ({len(data)} bytes, {len(files)} files)")
+    for _, arc in files:
+        print(f"  {arc}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
