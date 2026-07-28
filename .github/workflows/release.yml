@@ -2,7 +2,7 @@ name: Release
 
 on:
   push:
-    tags: ['v*']
+    tags: ['v[0-9]*']
 
 permissions:
   contents: read
@@ -30,6 +30,7 @@ jobs:
         # ../../stage01.bin and ../../assets/clut.bin relative to cwd.
         working-directory: plat/headless
         run: |
+          set -euo pipefail
           make
           ./rally_headless
 
@@ -38,6 +39,7 @@ jobs:
 
       - name: Build main.elf
         run: |
+          set -euo pipefail
           make
           arm-none-eabi-size main.elf
 
@@ -46,15 +48,23 @@ jobs:
         run: |
           set -euo pipefail
           tag="${GITHUB_REF_NAME}"
+          version="${tag#v}"
+          if [ -z "$version" ]; then
+            echo "::error::tag '$tag' yields an empty version" >&2
+            exit 1
+          fi
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
-          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
 
       - name: Package bundle
+        env:
+          TAG: ${{ steps.ver.outputs.tag }}
+          VERSION: ${{ steps.ver.outputs.version }}
         run: |
           set -euo pipefail
           python3 tools/bundle.py \
-            --out "dist/PicOS-Rally-${{ steps.ver.outputs.tag }}.zip" \
-            --expect-version "${{ steps.ver.outputs.version }}"
+            --out "dist/PicOS-Rally-${TAG}.zip" \
+            --expect-version "${VERSION}"
 
       - name: Write SHA256SUMS
         run: |
@@ -69,6 +79,8 @@ jobs:
           subject-path: dist/PicOS-Rally-${{ steps.ver.outputs.tag }}.zip
 
       - name: Write release notes
+        env:
+          TAG: ${{ steps.ver.outputs.tag }}
         run: |
           set -euo pipefail
           cat > dist/NOTES.md <<'EOF'
@@ -85,7 +97,9 @@ jobs:
 
           ```
           sha256sum -c SHA256SUMS
-          gh attestation verify PicOS-Rally-<tag>.zip --repo jeffory/PicOS-Rally
+          EOF
+          printf 'gh attestation verify PicOS-Rally-%s.zip --repo jeffory/PicOS-Rally\n' "$TAG" >> dist/NOTES.md
+          cat >> dist/NOTES.md <<'EOF'
           ```
 
           ## What is not yet verified
@@ -100,11 +114,12 @@ jobs:
       - name: Create prerelease
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.ver.outputs.tag }}
         run: |
           set -euo pipefail
-          gh release create "${{ steps.ver.outputs.tag }}" \
+          gh release create "${TAG}" \
             --prerelease \
-            --title "PicOS Rally ${{ steps.ver.outputs.tag }}" \
+            --title "PicOS Rally ${TAG}" \
             --notes-file dist/NOTES.md \
-            "dist/PicOS-Rally-${{ steps.ver.outputs.tag }}.zip" \
+            "dist/PicOS-Rally-${TAG}.zip" \
             dist/SHA256SUMS

@@ -184,7 +184,7 @@ def main(argv=None):
     args = p.parse_args(argv)
 
     try:
-        if args.expect_version:
+        if args.expect_version is not None:
             check_version(args.app_dir, args.expect_version)
         files = collect(args.app_dir)
         data = build_zip_bytes(args.app_dir, files=files)
