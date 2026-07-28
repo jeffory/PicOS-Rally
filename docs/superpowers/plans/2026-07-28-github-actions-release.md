@@ -1178,17 +1178,25 @@ python3 tools/rally_hw.py push --zip dist/PicOS-Rally-v0.5.0.zip
 Expected: the push reports the zip's exact size and 12 files, and the device
 reports `UNZIP 12/12`.
 
-**Reboot before launching.** The launcher builds its app registry at boot, so
-deleting `/apps/rally` drops `rally` from it and re-unzipping the files does
-not re-register it. `launch rally` will fail with `Error: app 'rally' not
-found` until the device is rebooted. This is expected after a wipe, not a
-sign the bundle is bad:
+**If `launch` says the app is not found, reboot once.** The launcher builds
+its app registry at boot. Wiping the directory does *not* evict the entry from
+the already-running registry, so in the normal case `launch rally` still works
+straight after a wipe and re-push. But if the device booted at any point while
+`/apps/rally` was absent or incomplete, which is exactly what happens if it
+crashes or is power-cycled mid-wipe, then `rally` is missing from the registry
+and `launch rally` fails with `Error: app 'rally' not found` no matter how many
+files you push afterwards. The cure is one reboot with the bundle already in
+place. This is a registry staleness symptom, not a bad bundle:
 
 ```bash
 # over serial: reboot
 # wait for the device to re-enumerate (the port number may change,
 # ACM0 -> ACM1; detect_port() handles this automatically)
 ```
+
+Both behaviours were observed during the first real run of this procedure: the
+crash-mid-wipe path needed the reboot, and a later clean wipe on an already-up
+device did not.
 
 - [ ] **Step 2: Confirm the game runs from bundle contents alone**
 
