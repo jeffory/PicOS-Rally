@@ -459,6 +459,9 @@ void picos_main(const PicoCalcAPI *api,
     uint32_t sim_acc_us = 0;
 
     for (;;) {
+        // Pace against the START of the frame, not the end of its work — see
+        // the pace block at the bottom of the loop.
+        uint64_t frame_start = api->sys->getTimeUs();
         if (api->sys->shouldExit()) break;
 
         // toggles
@@ -636,10 +639,15 @@ void picos_main(const PicoCalcAPI *api,
         }
 
         // ── Pace ────────────────────────────────────────────────────────────
+        // Spin until `budget` has elapsed since the frame STARTED, so the
+        // period is max(work, budget). Timing from here instead — i.e. after
+        // the work — spent a whole budget on top of it: measured 61.7 ms/frame
+        // (16.2 fps) against a 33.3 ms budget, which is 27.95 ms of work plus
+        // the full 33.33 ms. A frame that overruns its budget simply doesn't
+        // wait; it must not try to win the time back.
         uint32_t budget = s_pace_us[s_pace];
         if (budget) {
-            uint64_t start = api->sys->getTimeUs();
-            while (api->sys->getTimeUs() - start < budget)
+            while (api->sys->getTimeUs() - frame_start < budget)
                 app_poll();
         }
     }

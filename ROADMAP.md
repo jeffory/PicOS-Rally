@@ -136,7 +136,7 @@ corners, crest landing visibility, beach section contrast.
 
 ---
 
-## Frame pacing — 30 fps is not real (found 2026-08-01, pre-existing)
+## Frame pacing — fixed 2026-08-01 (`fix/frame-pacing`)
 
 Measured **16.2 fps** on device, not 30: five consecutive 300-frame markers
 at 18.52 s each. The pace loop in `app/main.c` takes its `start` timestamp
@@ -150,10 +150,21 @@ polishing run and the game has never hit the documented 30 fps. Game *time*
 is unaffected (the sim runs off a wall-clock accumulator and catches up),
 but it is now near its 4-step cap while driving.
 
-Worth doing before the next drive-feel pass, because "the car feels slow"
-was partly this: a one-line fix roughly doubles the frame rate, which will
-change how the car feels and probably wants the M6 tuning re-checked
-afterwards. Sequence the fix and the re-drive together.
+**Fixed and measured on device** (NOTES §9b): pace from the top of the
+frame, so the period is max(work, budget). Driving went ~14.8 → **26.3-27.2
+fps**, the results screen 16.2 → ~30, and sim headroom went from 4.06 steps
+(clipped at the cap of 4) to 2.20. The autopilot finish time is **identical**
+either side — 132.478 — because the sim is fixed-step, so this is
+presentation only.
+
+Still not 30 fps while driving, and that is now honest rather than hidden:
+real frame cost is ~37.5 ms against a 33.33 ms budget, i.e. render-bound.
+The biggest single item is `present` at a rock-steady 13.11 ms — the same
+viewport flush M4 measured. Chase that before the tile renderer.
+
+Because this roughly doubles the frame rate, **the M6 tuning wants a
+re-drive**: "the car feels slow" was partly 16 fps, so the handling numbers
+were tuned against a slower presentation than the game now has.
 
 ---
 

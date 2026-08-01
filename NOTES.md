@@ -752,3 +752,37 @@ unchanged, sim ~0.95 ms. The ~2.4 ms render rise is the tripled prop count.
 Not fixed here — it is a one-line change but roughly doubles the frame rate,
 which materially changes how the car feels and would invalidate the M6
 tuning pass. Decide the pace fix and the re-drive together.
+
+### 9b. Frame pacing fixed (2026-08-01)
+
+One line, on `fix/frame-pacing`: take the pace timestamp at the *top* of the
+frame and spin until `budget` has elapsed since then, so the period is
+max(work, budget) instead of work + budget.
+
+Measured on device:
+
+| | before | after |
+|---|---|---|
+| results screen (render 14.1 ms) | 16.2 fps | ~30 fps (work 31.7 ms < budget) |
+| driving (render ~19.6 ms) | ~14.8 fps* | **26.3–27.2 fps** measured |
+| sim steps needed per frame | 4.06 — clipped by the 4 cap | 2.20 of 4 |
+| stage finish (autopilot) | 132.478 | **132.478** |
+
+*the driving figure before the fix is arithmetic, not a direct measurement:
+work 34.05 ms + 33.33 ms budget = 67.4 ms. That arithmetic reproduced the
+measured 61.7 ms exactly on the results screen, so it is trustworthy.
+
+The finish time is **identical** either side of the fix, which is the result
+that matters: the sim is fixed-step off a wall-clock accumulator, so pacing
+changes presentation only, never the drive. It also buys back sim headroom —
+before, a driving frame needed 4.06 steps against a cap of 4 and was losing
+~1.5% of game time; now it needs 2.20.
+
+**It still isn't 30 fps while driving, and that is now honest.** With the
+spin corrected the frame's real cost is exposed: ~37.5 ms against a 33.33 ms
+budget, so the game is render-bound rather than pace-bound. The single
+biggest item is `present` at **13.11 ms** — dead steady in every sample, and
+the same 13.07 ms viewport flush §6 measured. §0.9 recorded "present (flush
+call) ~50 µs, non-blocking DMA confirmed"; that is not what this app sees, so
+`flushRows` is blocking here. Anyone chasing 30 (or the deferred 60) should
+start with the flush, not the tile renderer.
