@@ -86,10 +86,15 @@ Two renderer/bake bugs fell out of this and are fixed:
   *unreachable* for any cell the density pass had picked — silently deleting
   whole prop types. Fixed with a murmur3 finalizer.
 
-Still owed: a human drive at the new pace (the assist dial is still
-untested with a human), and a hardware frame-time check — the prop count
-tripled and the proc tile set went 6 → 627 tiles (`tiles_proc.bin` 160 KB;
-assets total 1.32 MB against the 5.86 MB PSRAM budget).
+Pushed and driven on device 2026-08-01 (see NOTES §9a). All of it renders
+correctly on the LCD, including the bitumen township that the old 256-tile
+mask corrupted; `17 keys applied, 0 unknown`; autopilot completes the stage
+in 2:12.478, CP 11/11. Frame cost measured: render 14.1 ms idle /
+19.8–21.2 ms driving (~2.4 ms up from the props), present 13.11 ms
+unchanged, assets 1.32 MB of the 5.86 MB budget.
+
+Still owed: a **human** drive at the new pace — the assist dial is still
+untested with a human.
 
 Note the stage now estimates 94.2 s against the 100–120 s design target
 (the AI drive is 136.8 s). If that matters, lengthen the stage rather than
@@ -109,8 +114,8 @@ corners, crest landing visibility, beach section contrast.
 - **M4 visual checks**: gravel hue (reads salmon-ish on the LCD?), sand
   road vs beach terrain contrast.
 - **M6 polishing run**: drive it — acceleration/braking/turn-in at the new
-  tune, and whether the assist dial still suits the higher pace. Also a
-  frame-time check: props 512 → 1500 and proc tiles 6 → 627.
+  tune, and whether the assist dial still suits the higher pace. (Frame
+  cost is now measured, see NOTES §9a — that part is discharged.)
 
 ---
 
@@ -128,6 +133,27 @@ corners, crest landing visibility, beach section contrast.
 - **60 fps**: needs DMA below 16.6 ms/frame (currently 17.6: 13.07
   viewport + 4.52 HUD strip). Options: 224-row viewport, HUD flush only on
   change, or accepting 50 fps. Not scheduled.
+
+---
+
+## Frame pacing — 30 fps is not real (found 2026-08-01, pre-existing)
+
+Measured **16.2 fps** on device, not 30: five consecutive 300-frame markers
+at 18.52 s each. The pace loop in `app/main.c` takes its `start` timestamp
+*after* the frame's work, so it spins a full 33.33 ms **on top of** the work
+rather than pacing to a deadline — sim 0.75 + render 14.1 + present 13.1 =
+27.95 ms of work, + 33.33 ms = 61.28 ms, against 61.7 ms observed. Pacing to
+a deadline gives max(work, 33.33) = a real 30 fps with ~5 ms spare.
+
+`git blame` puts this at 08791963 (2026-07-27, M1), so it predates the
+polishing run and the game has never hit the documented 30 fps. Game *time*
+is unaffected (the sim runs off a wall-clock accumulator and catches up),
+but it is now near its 4-step cap while driving.
+
+Worth doing before the next drive-feel pass, because "the car feels slow"
+was partly this: a one-line fix roughly doubles the frame rate, which will
+change how the car feels and probably wants the M6 tuning re-checked
+afterwards. Sequence the fix and the re-drive together.
 
 ---
 

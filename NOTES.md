@@ -702,3 +702,53 @@ earlier (`curve_knee` 0.60 → 0.45) is what sharpened turn-in.
 (AI drive 136.8 s). Prefer lengthening the stage over slowing the car.
 Assets 1.32 MB of the 5.86 MB PSRAM budget; props 512 → 1500 and proc tiles
 6 → 627 both want a hardware frame-time check.
+
+### 9a. Hardware verification of the polishing run — and a 30 fps claim that isn't
+
+Pushed and driven on device (autopilot, F3). Everything the run changed
+renders correctly on the LCD: smooth diagonal road shoulders with no
+stair-stepping, dense gum/paperbark/boulder scatter framing the corridor
+the whole way down the stage, the rebaked car reading as a rigid top-down
+car at every heading, and — the check that mattered most — the **bitumen
+township renders as grey road, not the cyan/white garbage** the old
+256-tile `& 0xFF` mask produced. `tuning: 17 keys applied, 0 unknown`, so
+every edited key parsed. The autopilot completed the stage in **2:12.478,
+CP 11/11** (headless AI predicted 136.8 s), so the wider corridor and new
+tune are still completable on hardware.
+
+**The 30 fps lock in §6 is not real. Measured 16.2 fps.** Five consecutive
+300-frame markers came in at 18.52 s each — 61.7 ms/frame. The cause is the
+pace loop in `app/main.c`:
+
+```c
+uint64_t start = api->sys->getTimeUs();          // AFTER present
+while (api->sys->getTimeUs() - start < budget) app_poll();
+```
+
+`start` is taken *after* the frame's work, so the loop spins a full 33.33 ms
+**on top of** the work instead of pacing to a 33.33 ms deadline. The
+arithmetic matches the measurement exactly: sim 0.75 + render 14.1 +
+present 13.1 = 27.95 ms of work, + 33.33 ms budget = 61.28 ms vs 61.7 ms
+observed. Pacing to a deadline instead would give max(27.95, 33.33) =
+33.33 ms — an actual 30 fps, with ~5 ms spare.
+
+This is **pre-existing**, not from the polishing run: `git blame` puts the
+loop at 08791963 (2026-07-27, M1) and the M6 commit does not touch
+`app/main.c`. It means the game has never run at the documented 30 fps, and
+that "the car feels slow" was partly a 16 fps presentation problem rather
+than purely a tuning one — worth knowing before reading too much into the
+handling numbers.
+
+Game *time* is fine: the sim is driven by a wall-clock accumulator
+(`while (sim_acc_us >= 16667 && steps < 4)`), so it catches up rather than
+running in slow motion. But the margin is now thin — at 61.7 ms it needs
+3.70 of its 4 permitted steps, and while driving (render ~20 ms, period
+~67.7 ms) it needs 4.06 and is clipped by the cap, i.e. losing ~1.5%.
+
+Frame cost after the run, measured on device: render **14.1 ms idle /
+19.8-21.2 ms driving** (was ~17.6 ms total pre-M6 per §6), present 13.11 ms
+unchanged, sim ~0.95 ms. The ~2.4 ms render rise is the tripled prop count.
+
+Not fixed here — it is a one-line change but roughly doubles the frame rate,
+which materially changes how the car feels and would invalidate the M6
+tuning pass. Decide the pace fix and the re-drive together.
