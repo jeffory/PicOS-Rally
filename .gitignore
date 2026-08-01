@@ -3,3 +3,6 @@ rally_headless
 dist/
 plat/headless/scene
 __pycache__/
+.codegraph/
+.cursor/
+plat/headless/perf

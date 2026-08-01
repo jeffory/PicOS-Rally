@@ -6,19 +6,21 @@ void gfx_init(gfx_t *g, const uint16_t *clut,
               const uint8_t **sections, const int *bases, const int *counts,
               int n_sections) {
     g->clut = clut;
-    for (int i = 0; i < 256; i++) g->gtile[i] = 0;
+    for (int i = 0; i < GFX_MAX_TILES; i++) g->gtile[i] = 0;
     for (int s = 0; s < n_sections; s++) {
         const uint8_t *sec = sections[s];
         for (int t = 0; t < counts[s]; t++) {
             int gi = bases[s] + t;
-            if (gi >= 0 && gi < 256) g->gtile[gi] = sec + t * (GFX_TILE * GFX_TILE);
+            if (gi >= 0 && gi < GFX_MAX_TILES)
+                g->gtile[gi] = sec + t * (GFX_TILE * GFX_TILE);
         }
     }
 }
 
 void gfx_blit_tile(gfx_t *g, uint16_t *fb, int fb_h,
                    int gidx, int sx, int sy) {
-    const uint8_t *tile = g->gtile[gidx & 0xFF];
+    if ((unsigned)gidx >= GFX_MAX_TILES) return;
+    const uint8_t *tile = g->gtile[gidx];
     if (!tile) return;
     const uint16_t *clut = g->clut;
     for (int ty = 0; ty < GFX_TILE; ty++) {
@@ -36,7 +38,8 @@ void gfx_blit_tile(gfx_t *g, uint16_t *fb, int fb_h,
 
 void gfx_blit_tile_masked(gfx_t *g, uint16_t *fb, int fb_h,
                           int gidx, int sx, int sy) {
-    const uint8_t *tile = g->gtile[gidx & 0xFF];
+    if ((unsigned)gidx >= GFX_MAX_TILES) return;
+    const uint8_t *tile = g->gtile[gidx];
     if (!tile) return;
     const uint16_t *clut = g->clut;
     for (int ty = 0; ty < GFX_TILE; ty++) {

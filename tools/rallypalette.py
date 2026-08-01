@@ -78,10 +78,18 @@ def write_clut_bin(colors, path):
 
 
 class Palettizer:
-    """Snap pixels to the 48 locked colors. Cache-backed nearest match."""
+    """Snap pixels to the 48 locked colors. Cache-backed nearest match.
 
-    def __init__(self, colors):
+    `allowed` restricts the snap to a subset of palette indices. Downscaling a
+    sprite blends neighbouring colours, and a blend of car red and white lands
+    nearest to a gravel/dust brown in the full 48 — putting terrain colours on
+    a car. Restricting the snap to the colours the source art actually uses
+    keeps blends between the artist's own colours.
+    """
+
+    def __init__(self, colors, allowed=None):
         self.colors = colors
+        self.allowed = None if allowed is None else set(allowed)
         self._cache = {}
 
     def index(self, rgb):
@@ -91,12 +99,24 @@ class Palettizer:
         r, g, b = rgb
         best, bestd = 0, 1 << 62
         for i, (cr, cg, cb) in enumerate(self.colors):
+            if self.allowed is not None and i not in self.allowed:
+                continue
             # perceptual-ish weighting: green matters most
             d = 3 * (r - cr) * (r - cr) + 6 * (g - cg) * (g - cg) + 2 * (b - cb) * (b - cb)
             if d < bestd:
                 best, bestd = i, d
         self._cache[rgb] = best
         return best
+
+    def used_indices(self, img):
+        """Palette indices present in an image's opaque pixels."""
+        img = img.convert("RGBA")
+        used = set()
+        src = img.tobytes()
+        for i in range(img.size[0] * img.size[1]):
+            if src[i * 4 + 3] >= 128:
+                used.add(self.index((src[i * 4], src[i * 4 + 1], src[i * 4 + 2])))
+        return used
 
     def palettize_image(self, img):
         """PIL RGBA image -> 8bpp PIL image ('P' mode raw indices) honoring alpha."""

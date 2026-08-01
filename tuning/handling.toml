@@ -4,25 +4,37 @@
 # --- vehicle (§9 starting figures) ---
 mass = 1180.0
 wheelbase = 2.55
-cg_front = 0.52
+cg_front = 0.54           # M6: was 0.52 — a little more rear bias both
+                          # shortens 0-100 and sharpens turn-in
 cg_height = 0.55
 iz = 1600.0
-max_speed = 42.0          # m/s (~151 km/h)
-engine_force = 6000.0     # N at standstill, linear taper to 0 at max_speed
-brake_force = 9000.0
+max_speed = 46.0          # m/s (~166 km/h)  M6: was 42
+engine_force = 9800.0     # N at standstill, linear taper to 0 at max_speed
+                          # M6: was 6000 — 0-100 took 10.7 s and the car
+                          # never passed 124 km/h, so it read as sluggish
+brake_force = 11500.0     # M6: was 9000 (100-0 was 48.6 m)
 drag = 0.4257             # N·s²/m² (½ρCdA)
 rolling_res = 12.8        # N·s/m
 ca_front = 60000.0        # N/rad
-ca_rear = 65000.0         # stiffer rear = mild understeer (forgiving default)
+ca_rear = 61000.0         # stiffer rear = mild understeer (forgiving default)
+                          # M6: was 65000. Front is grip-limited, so ca_front
+                          # changes nothing at all; easing the rear is the only
+                          # lever that rotates the car (on its own, 3.58 s ->
+                          # 3.55 s to 90 deg at 54 km/h)
 
 # --- digital input: these ARE the handling on a keyboard ---
 # M2.3 tune (user drive 1): sharper ramps, more lock at speed, knee curve.
-steer.ramp_up_s = 0.100   # 0 → full lock (was 0.180 — felt lazy)
-steer.ramp_down_s = 0.070 # full → centre (was 0.110)
+steer.ramp_up_s = 0.085   # 0 → full lock (M6: was 0.100)
+steer.ramp_down_s = 0.060 # full → centre (M6: was 0.070)
 steer.max_low_deg = 35.0  # lock at standstill
-steer.max_high_deg = 14.0 # lock at max speed (was 12 — not enough lock fast)
-steer.curve_knee = 0.60   # high lock reached at 60% of max speed
-throttle.ramp_up_s = 0.060
+steer.max_high_deg = 14.0 # lock at max speed (M6 measured: more lock
+                          # here adds scrub, not yaw — the front is already
+                          # saturated at mu*load, so 17 deg turns *slower*)
+steer.curve_knee = 0.45   # high lock reached at 45% of max speed. M6: was
+                          # 0.60. The front saturates at mu*load, so surplus
+                          # lock scrubs instead of turning — winding lock off
+                          # earlier measurably sharpens turn-in.
+throttle.ramp_up_s = 0.040   # M6: was 0.060
 
 # --- handbrake (M2.3: was "works but very subtle") ---
 hb.mu_cut = 0.45      # rear mu multiplier (was 0.55)

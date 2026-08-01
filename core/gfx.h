@@ -13,9 +13,17 @@
 #define GFX_TRANSPARENT 255
 #define GFX_TILEMAP_LAYERS 4   // base + 2 wang layers + road overlay per cell
 
+// Tilemap slots are u16 (0xFFFF = none), so the blob has always been able to
+// name more than 256 tiles. The table used to be 256 entries and blits masked
+// the index with & 0xFF, which silently drew a wrong tile instead of failing —
+// M6's smooth road edges (627 procedural tiles) landed the bitumen and sand
+// cuts on terrain art. Out-of-range now draws nothing, and trackbake refuses
+// to bake an atlas larger than this.
+#define GFX_MAX_TILES 1024
+
 typedef struct {
     const uint16_t *clut;                 // 256 RGB565 values (panel order)
-    const uint8_t *gtile[256];            // global tile idx -> 16x16 8bpp data
+    const uint8_t *gtile[GFX_MAX_TILES];  // global tile idx -> 16x16 8bpp data
 } gfx_t;
 
 // Build the global tile pointer table. sections[i] holds counts[i] 16x16

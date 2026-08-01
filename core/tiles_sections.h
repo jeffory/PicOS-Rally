@@ -3,5 +3,5 @@
 #define TILE_SEC_COUNT 4
 static const char *const TILE_SEC_NAMES[TILE_SEC_COUNT] = {"wang_water_sand", "wang_sand_grass", "wang_grass_gravel", "proc"};
 static const int TILE_SEC_BASES[TILE_SEC_COUNT] = {0, 16, 32, 48};
-static const int TILE_SEC_SIZES[TILE_SEC_COUNT] = {16, 16, 16, 6};
+static const int TILE_SEC_SIZES[TILE_SEC_COUNT] = {16, 16, 16, 627};
 #define TILE_GRASS_FILL 28

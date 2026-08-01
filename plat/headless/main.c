@@ -342,10 +342,25 @@ int main(int argc, char **argv) {
         CHECK("tilemap indices in range", bad == 0);
         CHECK("every cell has a base tile", bases == cells);
         CHECK("road overlays present", overlays > 1000);
-        CHECK("props scattered (100..512)", track.num_props > 100 && track.num_props <= 512);
+        CHECK("props scattered (100..1500)",
+              track.num_props > 100 && track.num_props <= 1500);
         int pb = 0;
         for (int i = 0; i < track.num_props; i++) if (track.props[i].type >= 24) pb++;
         CHECK("prop types in range", pb == 0);
+        // The scatter used to walk the grid row by row and stop at its cap,
+        // so every prop landed in one band at the top of the map and the
+        // whole stage drove past bare verges. Require them to follow the
+        // racing line down the stage instead.
+        if (track.num_props > 0) {
+            int32_t ylo = track.props[0].y_dm, yhi = ylo;
+            for (int i = 1; i < track.num_props; i++) {
+                if (track.props[i].y_dm < ylo) ylo = track.props[i].y_dm;
+                if (track.props[i].y_dm > yhi) yhi = track.props[i].y_dm;
+            }
+            float span = (yhi - ylo) * 0.1f;
+            float grid_span = track.gh * track.cell;
+            CHECK("props span the stage, not one band", span > grid_span * 0.5f);
+        }
 
         // gfx smoke: render the stage start through the real asset pipeline
         uint16_t *clut = 0;

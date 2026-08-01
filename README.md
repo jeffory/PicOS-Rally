@@ -25,13 +25,20 @@ make            # produces main.elf
 ## Dev loop
 
 - `plat/headless/` — host test runner (`make && ./rally_headless`, TAP
-  output; physics, completability AI, tilemap, gfx, audio, effects) and
-  `scene.c` (render any stage distance to a PPM for eyeballing).
+  output; physics, completability AI, tilemap, gfx, audio, effects),
+  `scene.c` (render any stage distance to a PPM for eyeballing) and
+  `perf.c` (0-100, 100-0 and steer response against the real sim, so a
+  `tuning/handling.toml` change can be judged on numbers before a drive).
 - `tools/trackbake.py` — stage TOML → `stage01.bin` (racing line, target
   speeds, pacenotes, checkpoints, surface grid, wang tilemap, prop scatter).
 - `tools/tilebake.py`, `spritebake.py`, `palettize.py`, `procgen_road.py` —
   art pipeline: PixelLab PNGs (`art/`) → palette-locked 8bpp bins
-  (`assets/`). Palette source of truth: `art/style.toml`.
+  (`assets/`). Palette source of truth: `art/style.toml`. A rotation sheet
+  wants `spritebake.py --fit --snap-subset` (see its docstring for why).
+- `tools/pixellab_gen.py`, `pixellab_rotate.py` — generate/re-view source art
+  through the PixelLab API (`PIXELLAB_API_KEY`; each call spends one
+  generation). Both force the locked palette; `--palette car` narrows it to
+  car/neutral colours so a vehicle can't come back painted in terrain hues.
 - `tools/rally_hw.py` — serial driver for hardware: zip+push, launch,
   keypresses, screenshots (env `RALLY_APP_DIR` overrides the source tree the
   bundle is re-derived from, not a prebuilt output dir; it must contain

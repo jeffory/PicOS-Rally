@@ -1,11 +1,11 @@
 {
   "car": {
     "bin": "car.bin",
-    "bin_sha256": "aace426f2573b2256f222187eb82ba03754637c70d8a6e14a73321763401289a",
+    "bin_sha256": "16cab0a3763aa6d41bc011246701e881e5989ef73203f468d3d9589128cb2e2c",
     "fmt": "idx8-sheet",
     "frames": 32,
     "h": 32,
-    "src": "car_sources.json",
+    "src": "car_topdown.png",
     "w": 32
   },
   "hero": {
@@ -46,11 +46,11 @@
   },
   "proc": {
     "bin": "tiles_proc.bin",
-    "bin_sha256": "f6fb80d7b277b28528cb558f491751cdd515037ed3e11e8c02811ecf3a0f508b",
+    "bin_sha256": "bec01d16169e8bb16e3e49813b230989394510afa553622c9b4c6cf71e5b08f8",
     "fmt": "idx8-tiles",
     "src": "procgen_road.py",
     "tile_px": 16,
-    "tiles": 6
+    "tiles": 627
   },
   "props": {
     "bin": "props.bin",

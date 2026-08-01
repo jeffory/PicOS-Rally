@@ -617,3 +617,88 @@ contrast) — v0.5.0 ships flagged prerelease with those outstanding. Repo
 settings not yet applied: branch protection requiring the two checks, and
 tag protection (any tag currently publishes a signed attested artefact from
 any commit).
+
+---
+
+## 9. M6 polishing run (2026-08-01)
+
+Five items off a play session: car looks wrong when it rotates, track reads
+blocky, car feels slow, no props near the track, track too narrow. Four of
+the five turned out to have a root cause other than the obvious one, and two
+latent bugs fell out. Everything below is host-verified (52/52 headless,
+15/15 bundle, ARM clean); a human drive is still owed.
+
+**Tooling added.** `plat/headless/perf` measures 0-100, 100-0 and steer
+response against the real sim, so a `handling.toml` change is judged on
+numbers instead of vibes. Its steering test has to *hold* the target speed —
+the first version steered at full throttle, which transfers load off the
+front axle, so a stronger engine scored as worse turning. `tools/pixellab_gen.py`
+(text→sprite, pixflux) and `tools/pixellab_rotate.py` wrap the PixelLab API;
+both pass the locked palette as `color_image`, and `--palette car` restricts
+it to car/neutral colours (with the full 48 offered, the model painted a
+cool rim-shadow in `water_light`/`water_mid`/`creek` — a teal halo on a car).
+
+**Car rotation was an art bug, not a bake bug.** The M4 sheet picked the
+nearest of 8 PixelLab views and rotated the delta. Those 8 were generated at
+a *side/low* camera, so apparent elevation swings per heading: measured
+opaque bbox goes 35x49 (south), 61x34 (east), 33x52 (north) — the car's drawn
+length swings 49→61→52 px when a rigid body under a fixed overhead camera
+must hold constant. That is exactly "looks incorrect when rotating". Fixed by
+generating one true top-down view and rotating it through all 32 headings,
+which is correct by construction. Two `spritebake.py` flags came out of it:
+`--fit` (centre the content in a square the size of its own diagonal, so no
+heading clips its corners and every heading shares one pivot) and
+`--snap-subset` (restrict palette snapping to colours the source actually
+uses — a red/white blend from the downscale otherwise snaps nearest to
+`gravel_dust`, putting terrain brown on the car; wrong-colour pixels 4-5% →
+~1%). Thin detail does not survive downscale: at a 64px source the 1px
+livery stripe averaged away entirely, so the source is generated at 128².
+
+**Smooth road edges: marching squares is the wrong parameterisation here.**
+First attempt encoded which of a cell's four corners were inside the
+corridor. The corridor is only ~2.25 cells wide, so on a diagonal a cell
+often has just *one* corner inside (419 such cells on stage01) and the road
+breaks into disconnected blobs. Corner membership under-samples a band that
+thin. What works: the boundary is locally a straight line, so each edge tile
+is a half-plane at a quantised (angle, offset), both derived analytically
+from the nearest racing-line point — 16 angles x 13 offsets x 3 surfaces,
+plus a Bayer band scattering a few pixels of gravel along the cut so the
+shoulder reads loose rather than vector-sharp. Purely a bake change: the
+renderer already masked-blits the overlay slot.
+
+**`gfx_t.gtile` was 256 entries and blits masked the index with `& 0xFF`.**
+The 627-tile proc set pushed bitumen and sand past 255, and they silently
+wrapped onto terrain art — the township rendered as cyan/white stripes. The
+failure mode is the problem: an out-of-range tile drew *wrong* art instead of
+nothing, which costs a debugging cycle to localise. Tilemap slots have always
+been u16, so the blob format was never the limit. Now `GFX_MAX_TILES` = 1024
+(+3 KB bss), out-of-range draws nothing, and `trackbake` fails the bake
+rather than emitting an atlas the renderer cannot index.
+
+**Props: two bugs, both silent.** (1) `scatter_props` walked the grid
+row-major and returned at its 512 cap, so every prop landed in y −103..−43 of
+a −105..655 map — the whole stage drove past bare verges. Candidates are now
+taken nearest-the-corridor first, in three density bands, and the headless
+suite asserts props span >50% of the grid so this cannot come back.
+(2) `_fnv` did not avalanche: callers draw several independent decisions per
+cell by varying only the last value (density tag 1, type tag 3), and plain
+FNV-1a leaves those dependent — measured, type rolls 60..79 were
+*unreachable* for any cell the density pass had selected, silently deleting
+whole prop types from the scatter. A murmur3 finalizer flattens it (deciles
+17.7/4.4/.../0.0/0.0/... → 9.7..10.3).
+
+**Also**: `bake()`'s cell→line search was O(cells x line points) brute force
+(9.5 s). Stamping outward from each line point within reach instead is 0.35 s,
+byte-identical output — worth it because the polishing run rebakes constantly.
+
+**Feel.** 0-100 km/h 10.73 → 6.50 s, 100-0 braking 48.6 → 38.6 m, top speed
+124 → 166 km/h, 90° turn-in at 54 km/h 3.45 → 3.38 s. The turning lever is
+counter-intuitive: the front axle saturates at `mu*load`, so `ca_front` has
+*literally no effect* (identical to 2 dp across 60k-78k) and surplus lock only
+scrubs — 17° of high-speed lock turns *slower* than 14°. Winding lock off
+earlier (`curve_knee` 0.60 → 0.45) is what sharpened turn-in.
+
+**Watch**: stage estimate is now 94.2 s against the 100-120 s design target
+(AI drive 136.8 s). Prefer lengthening the stage over slowing the car.
+Assets 1.32 MB of the 5.86 MB PSRAM budget; props 512 → 1500 and proc tiles
+6 → 627 both want a hardware frame-time check.
